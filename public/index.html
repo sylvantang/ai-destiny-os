@@ -192,12 +192,20 @@
     display: inline-block;
   }
   .chart-container {
-    width: 100%;
-    margin-top: 20px;
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 6px;
     overflow: hidden;
+    margin-top: 20px;
+  }
+  .charts-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-top: 20px;
+  }
+  @media (max-width: 700px) {
+    .charts-grid { grid-template-columns: 1fr; }
   }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
@@ -233,8 +241,10 @@
   <div id="chart-card" class="chart-card">
     <h2 style="font-size:1rem;color:var(--accent);margin-bottom:12px;">四柱八字 · Four Pillars</h2>
     <div id="chart-content"></div>
-    <div id="radar-chart" class="chart-container" style="height:360px;"></div>
-    <div id="timeline-chart" class="chart-container" style="height:320px;"></div>
+    <div class="charts-grid">
+      <div id="radar-chart" class="chart-container" style="height:420px;"></div>
+      <div id="timeline-chart" class="chart-container" style="height:420px;"></div>
+    </div>
   </div>
 
   <!-- AI Analysis -->
@@ -417,10 +427,19 @@ function getFormData() {
 let radarChart = null;
 let timelineChart = null;
 
+const TIMELINE_COLORS = {
+  '财运': '#4a9',
+  '事业': '#48b',
+  '学习': '#e9b44c',
+  '才华': '#e55',
+  '综合': '#8b949e',
+};
+
 function renderRadarChart(wuxingCounts) {
   const dom = document.getElementById('radar-chart');
   if (!dom) return;
   if (!radarChart) radarChart = echarts.init(dom);
+  else radarChart.resize();
 
   const wuxing = ['木', '火', '土', '金', '水'];
   const values = wuxing.map(w => wuxingCounts[w] ?? 0);
@@ -431,22 +450,30 @@ function renderRadarChart(wuxingCounts) {
     title: {
       text: '五行能量分布',
       left: 'center',
-      top: 8,
-      textStyle: { color: '#c9d1d9', fontSize: 14, fontWeight: 500 },
+      top: 12,
+      textStyle: { color: '#c9d1d9', fontSize: 15, fontWeight: 600 },
     },
     tooltip: {
       trigger: 'item',
       backgroundColor: 'rgba(22,27,34,0.95)',
       borderColor: '#30363d',
       textStyle: { color: '#c9d1d9', fontSize: 13 },
+      formatter: function(p) {
+        const labels = ['木', '火', '土', '金', '水'];
+        let html = '<b>五行能量</b><br/>';
+        for (let i = 0; i < labels.length; i++) {
+          html += `${labels[i]}: ${p.value[i]}<br/>`;
+        }
+        return html;
+      },
     },
     radar: {
-      center: ['50%', '55%'],
-      radius: '65%',
+      center: ['50%', '58%'],
+      radius: '72%',
       axisName: {
-        color: '#8b949e',
-        fontSize: 13,
-        fontWeight: 500,
+        color: '#c9d1d9',
+        fontSize: 14,
+        fontWeight: 600,
       },
       indicator: wuxing.map(w => ({ name: w, max: maxVal })),
       axisLine: { lineStyle: { color: '#30363d' } },
@@ -465,15 +492,15 @@ function renderRadarChart(wuxingCounts) {
             type: 'radial',
             x: 0.5, y: 0.5, r: 0.5,
             colorStops: [
-              { offset: 0, color: 'rgba(201,147,0,0.25)' },
-              { offset: 1, color: 'rgba(201,147,0,0.05)' },
+              { offset: 0, color: 'rgba(201,147,0,0.3)' },
+              { offset: 1, color: 'rgba(201,147,0,0.06)' },
             ],
           },
         },
-        lineStyle: { color: '#c93', width: 2 },
+        lineStyle: { color: '#c93', width: 2.5 },
         itemStyle: { color: '#c93' },
         symbol: 'circle',
-        symbolSize: 6,
+        symbolSize: 8,
       }],
     }],
   });
@@ -481,35 +508,30 @@ function renderRadarChart(wuxingCounts) {
 
 function renderTimelineChart(dayun, lifePeriods) {
   const dom = document.getElementById('timeline-chart');
-  if (!dom) return;
+  if (!dom || dayun.length === 0) return;
   if (!timelineChart) timelineChart = echarts.init(dom);
+  else timelineChart.resize();
 
-  const themeColors = {
-    '财运': '#4a9',
-    '事业': '#48b',
-    '学习': '#e9b44c',
-    '才华': '#e55',
-    '综合': '#8b949e',
-  };
-
+  // Compute birth year from form data
+  const birthYear = +document.getElementById('f-year').value;
   const currentYear = new Date().getFullYear();
-  const birthYear = currentYear - (dayun[0]?.startAge ?? 0);
   const currentAge = currentYear - birthYear;
 
-  const maxAge = Math.max(80, dayun.length > 0 ? dayun[dayun.length - 1].endAge + 5 : 80);
+  const maxAge = Math.max(85, dayun[dayun.length - 1].endAge + 5);
 
-  // Build data for custom series
-  const blocks = dayun.map((dy, i) => {
+  // Stacked bar approach: invisible spacers + colored blocks
+  const spacers = dayun.map(d => d.startAge);
+  const durations = dayun.map(d => Math.max(d.endAge - d.startAge, 0.5));
+
+  // Build block metadata for labels and tooltips
+  const blockMeta = dayun.map((dy, i) => {
     const lp = lifePeriods[i];
+    const theme = lp ? lp.theme : '综合';
     return {
       name: dy.pillar,
-      value: [dy.startAge, dy.endAge],
-      theme: lp ? lp.theme : '综合',
-      ageRange: `${dy.startAge}-${dy.endAge}岁`,
-      itemStyle: {
-        color: themeColors[lp?.theme] || themeColors['综合'],
-        borderRadius: 4,
-      },
+      ageRange: `${dy.startAge.toFixed(1)}-${dy.endAge.toFixed(1)}岁`,
+      theme: theme,
+      color: TIMELINE_COLORS[theme] || TIMELINE_COLORS['综合'],
     };
   });
 
@@ -518,103 +540,108 @@ function renderTimelineChart(dayun, lifePeriods) {
     title: {
       text: '人生大运时间轴',
       left: 'center',
-      top: 8,
-      textStyle: { color: '#c9d1d9', fontSize: 14, fontWeight: 500 },
+      top: 12,
+      textStyle: { color: '#c9d1d9', fontSize: 15, fontWeight: 600 },
     },
     tooltip: {
-      trigger: 'item',
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
       backgroundColor: 'rgba(22,27,34,0.95)',
       borderColor: '#30363d',
       textStyle: { color: '#c9d1d9', fontSize: 13 },
-      formatter: function(p) {
-        return `<b>${p.name}</b><br/>${p.data.ageRange}<br/>主题：${p.data.theme}`;
+      formatter: function(ps) {
+        const block = ps.find(p => p.seriesName === '大运');
+        if (!block) return '';
+        const meta = blockMeta[block.dataIndex];
+        if (!meta) return '';
+        return `<b>${meta.name}</b><br/>${meta.ageRange}<br/>主题：${meta.theme}`;
       },
     },
-    grid: { left: 20, right: 20, top: 60, bottom: 40 },
+    grid: { left: 18, right: 18, top: 60, bottom: 50 },
     xAxis: {
       type: 'value',
       min: 0,
       max: maxAge,
       axisLine: { lineStyle: { color: '#30363d' } },
-      axisTick: { show: false },
+      axisTick: { alignWithLabel: true },
       axisLabel: {
         color: '#8b949e',
         fontSize: 11,
         formatter: '{value}岁',
+        margin: 8,
       },
       splitLine: { lineStyle: { color: '#21262d', type: 'dashed' } },
-      name: '年龄',
-      nameTextStyle: { color: '#8b949e', fontSize: 11 },
     },
     yAxis: {
       type: 'category',
-      data: [''],
-      axisLine: { show: false },
+      data: ['大运'],
+      axisLine: { lineStyle: { color: '#30363d' } },
       axisTick: { show: false },
-      axisLabel: { show: false },
+      axisLabel: { color: '#8b949e', fontSize: 11 },
     },
-    series: [{
-      type: 'custom',
-      renderItem: function(params, api) {
-        const idx = params.dataIndex;
-        const startAge = api.value(0);
-        const endAge = api.value(1);
-        const yIdx = 0;
-
-        const start = api.coord([startAge, yIdx]);
-        const end = api.coord([endAge, yIdx]);
-        const height = api.size([0, 1])[1] * 0.5;
-
-        const x = start[0];
-        const y = start[1] - height / 2;
-        const w = Math.max(end[0] - start[0], 2);
-        const h = height;
-
-        const color = blocks[idx]?.itemStyle?.color || '#8b949e';
-
-        return {
-          type: 'group',
-          children: [
-            // Block background with rounded corners
-            {
-              type: 'rect',
-              shape: { x, y, width: w, height: h, r: 3 },
-              style: { fill: color, stroke: null, opacity: 0.85 },
-            },
-            // Label
-            {
-              type: 'text',
-              style: {
-                text: blocks[idx]?.name || '',
-                x: x + w / 2,
-                y: y + h / 2,
-                textAlign: 'center',
-                textVerticalAlign: 'middle',
-                fill: w > 60 ? '#fff' : 'transparent',
-                fontSize: w > 40 ? 11 : 0,
-                fontFamily: 'PingFang SC, sans-serif',
-              },
-            },
-          ],
-        };
+    series: [
+      // Invisible spacers — push colored blocks to the right start position
+      {
+        name: 'spacer',
+        type: 'bar',
+        stack: 'dayun',
+        barWidth: '55%',
+        data: spacers.map(v => ({ value: v, itemStyle: { color: 'transparent' } })),
+        label: { show: false },
+        emphasis: { itemStyle: { color: 'transparent' } },
       },
-      data: blocks.map(b => b.value),
-      encode: { x: [0, 1], y: [2] },
-      markLine: {
-        silent: true,
-        symbol: 'triangle',
-        symbolSize: [8, 12],
-        symbolRotate: 0,
-        lineStyle: { color: '#e55', width: 1.5, type: 'dashed' },
+      // Colored dayun blocks
+      {
+        name: '大运',
+        type: 'bar',
+        stack: 'dayun',
+        barWidth: '55%',
+        data: durations.map((v, i) => ({
+          value: v,
+          itemStyle: {
+            color: blockMeta[i].color,
+            borderRadius: v < 2 ? [0, 0, 0, 0] : [3, 3, 3, 3],
+            opacity: 0.88,
+          },
+        })),
         label: {
-          formatter: `${currentAge}岁`,
-          color: '#e55',
+          show: true,
+          position: 'insideRight',
+          color: '#fff',
           fontSize: 11,
-          position: 'start',
+          fontWeight: 500,
+          formatter: function(p) {
+            const meta = blockMeta[p.dataIndex];
+            const w = durations[p.dataIndex];
+            if (w < 2.5) return '';
+            if (w < 5) return meta.name;
+            return `${meta.name}\n${meta.ageRange}`;
+          },
         },
-        data: [{ xAxis: currentAge, name: '当前' }],
+        markLine: {
+          silent: true,
+          symbol: 'none',
+          lineStyle: { color: '#e55', width: 2, type: 'solid' },
+          label: {
+            formatter: `当前 ${currentAge}岁`,
+            color: '#e55',
+            fontSize: 12,
+            fontWeight: 600,
+            position: 'insideStartTop',
+            distance: 8,
+          },
+          data: [{ xAxis: currentAge }],
+        },
+        markPoint: {
+          silent: true,
+          symbol: 'triangle',
+          symbolSize: [14, 10],
+          symbolRotate: 180,
+          itemStyle: { color: '#e55' },
+          data: [{ name: '当前', coord: [currentAge, 0] }],
+        },
       },
-    }],
+    ],
   });
 }
 

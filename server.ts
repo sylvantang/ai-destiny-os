@@ -113,20 +113,25 @@ async function handleChart(req: IncomingMessage, res: ServerResponse): Promise<v
           sexagenary: SEXAGENARY_NAMES[p.sexagenaryIndex],
         })),
         dayMaster: { name: chart.dayMaster.name, wuxing: chart.dayMasterWuxing },
-        currentDayun: chart.currentDayun
-          ? {
-              pillar: SEXAGENARY_NAMES[chart.currentDayun.pillar.sexagenaryIndex],
-              startAge: chart.currentDayun.startAge,
-              endAge: chart.currentDayun.endAge,
-            }
-          : null,
+        currentDayun: (() => {
+          if (!chart.currentDayun) return null;
+          const cdIdx = chart.dayun.indexOf(chart.currentDayun);
+          const endAge = cdIdx >= 0 && cdIdx < chart.dayun.length - 1
+            ? chart.dayun[cdIdx + 1]!.startAge
+            : chart.currentDayun.startAge + 10;
+          return {
+            pillar: SEXAGENARY_NAMES[chart.currentDayun.pillar.sexagenaryIndex],
+            startAge: chart.currentDayun.startAge,
+            endAge,
+          };
+        })(),
         startAge: firstDayun?.startAge ?? 0,
         direction: firstDayun?.direction ?? '',
         wuxingCounts: chart.wuxingCount,
-        dayun: chart.dayun.slice(0, 8).map(d => ({
+        dayun: chart.dayun.slice(0, 8).map((d, i, arr) => ({
           pillar: SEXAGENARY_NAMES[d.pillar.sexagenaryIndex],
           startAge: d.startAge,
-          endAge: d.endAge,
+          endAge: i < arr.length - 1 ? arr[i + 1]!.startAge : d.startAge + 10,
         })),
         lifePeriods: ctx.fortune.lifePeriods.map(lp => ({
           name: lp.name,
@@ -250,15 +255,23 @@ function buildChartPayload(agent: DestinyAgent): Record<string, unknown> {
     })),
     dayMaster: { name: chart.dayMaster.name, wuxing: chart.dayMasterWuxing },
     wuxingCounts: chart.wuxingCount,
-    currentDayun: chart.currentDayun ? {
-      pillar: SEXAGENARY_NAMES[chart.currentDayun.pillar.sexagenaryIndex],
-      startAge: chart.currentDayun.startAge,
-    } : null,
+    currentDayun: (() => {
+      if (!chart.currentDayun) return null;
+      const cdIdx = chart.dayun.indexOf(chart.currentDayun);
+      const endAge = cdIdx >= 0 && cdIdx < chart.dayun.length - 1
+        ? chart.dayun[cdIdx + 1]!.startAge
+        : chart.currentDayun.startAge + 10;
+      return {
+        pillar: SEXAGENARY_NAMES[chart.currentDayun.pillar.sexagenaryIndex],
+        startAge: chart.currentDayun.startAge,
+        endAge,
+      };
+    })(),
     startAge: chart.dayun[0]?.startAge ?? 0,
-    dayun: chart.dayun.slice(0, 8).map(d => ({
+    dayun: chart.dayun.slice(0, 8).map((d, i, arr) => ({
       pillar: SEXAGENARY_NAMES[d.pillar.sexagenaryIndex],
       startAge: d.startAge,
-      endAge: d.endAge,
+      endAge: i < arr.length - 1 ? arr[i + 1]!.startAge : d.startAge + 10,
     })),
     lifePeriods: ctx.fortune.lifePeriods.map(lp => ({
       name: lp.name,
