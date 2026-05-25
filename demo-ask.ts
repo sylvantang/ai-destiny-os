@@ -7,7 +7,21 @@ const birth = {
   longitude: 116.4, isDST: false, gender: '男' as const,
 };
 
-const llm = createAutoClient()!;
+import { LLMClient } from './agent/llmClient.js';
+
+const apiKey = process.env['ANTHROPIC_AUTH_TOKEN'] || process.env['ANTHROPIC_API_KEY'];
+if (!apiKey) {
+  console.error('No API key found. Set ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN.');
+  process.exit(1);
+}
+const llm = new LLMClient({
+  provider: 'anthropic',
+  apiKey,
+  model: process.env['ANTHROPIC_MODEL'] || 'claude-sonnet-4-6',
+  baseURL: process.env['ANTHROPIC_BASE_URL'],
+  maxTokens: 8192,
+});
+
 const agent = new DestinyAgent(birth, llm);
 
 // Show the chart
