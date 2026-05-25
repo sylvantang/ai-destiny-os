@@ -268,43 +268,23 @@ class DestinyREPL {
     process.stdout.write(`\n\x1b[33m[思考中]\x1b[0m `);
 
     let fullText = '';
-    let topic: string | undefined;
-    let usage: { inputTokens: number; outputTokens: number } | undefined;
 
     try {
       for await (const event of this.agent.processQueryStream(input)) {
         if (event.type === 'token' && event.content) {
           if (!fullText) {
-            // First token — clear the "thinking" indicator and start new line
             process.stdout.write('\r\x1b[K\n');
           }
           fullText += event.content;
           process.stdout.write(event.content);
         } else if (event.type === 'done') {
-          topic = event.topic;
           if (fullText) process.stdout.write('\n');
         }
-      }
-
-      // Track in history manually (since processQueryStream doesn't do it)
-      if (fullText) {
-        this.agent.state.session.turnCount++;
-        this.agent.state.session.lastActiveAt = new Date().toISOString();
-        this.agent.state.history.push({
-          role: 'user', content: input, topic: topic ?? '综合', timestamp: new Date().toISOString(),
-        });
-        this.agent.state.history.push({
-          role: 'agent', content: fullText, topic: topic ?? '综合', timestamp: new Date().toISOString(),
-        });
       }
     } catch (err) {
       console.error(`\n\x1b[31m错误: ${err instanceof Error ? err.message : '未知错误'}\x1b[0m`);
     }
 
-    // Show token usage after response
-    if (usage) {
-      console.log(`\n\x1b[90m[Tokens: ${usage.inputTokens} in / ${usage.outputTokens} out]\x1b[0m`);
-    }
   }
 
   private showHistory(): void {

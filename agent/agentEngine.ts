@@ -214,6 +214,37 @@ export class DestinyAgent {
     return response;
   }
 
+  /**
+   * Build the LLM message array with conversation history for context.
+   */
+  private buildMessagesWithHistory(prompt: AIPrompt): ChatMessage[] {
+    const messages: ChatMessage[] = [
+      { role: 'system', content: prompt.system },
+    ];
+
+    // Inject memory context
+    if (this.state.memory) {
+      const enriched = buildEnrichedContext(this.state.memory, this.state.ctx);
+      const memoryBlock = formatMemoryForPrompt(enriched);
+      messages.push({
+        role: 'user',
+        content: `[用户历史背景]\n${memoryBlock}`,
+      });
+    }
+
+    // Include recent conversation history for follow-up context
+    const recentHistory = this.state.history.slice(-12); // last 6 turns
+    for (const turn of recentHistory) {
+      messages.push({
+        role: turn.role === 'user' ? 'user' : 'assistant',
+        content: turn.content,
+      });
+    }
+
+    messages.push({ role: 'user', content: prompt.user });
+    return messages;
+  }
+
   private async buildResponseAsync(
     input: string,
     topic: QueryDomain,
@@ -225,21 +256,7 @@ export class DestinyAgent {
       return { ...this.buildFallbackResponse(topic), llmGenerated: false };
     }
 
-    // Build messages from prompt
-    const messages: ChatMessage[] = [
-      { role: 'system', content: prompt.system },
-      { role: 'user', content: prompt.user },
-    ];
-
-    // Optionally inject memory context
-    if (this.state.memory) {
-      const enriched = buildEnrichedContext(this.state.memory, this.state.ctx);
-      const memoryBlock = formatMemoryForPrompt(enriched);
-      messages.splice(1, 0, {
-        role: 'user',
-        content: `[用户历史背景]\n${memoryBlock}`,
-      });
-    }
+    const messages = this.buildMessagesWithHistory(prompt);
 
     try {
       const result = await this.llm.chat(messages);
@@ -276,31 +293,49 @@ export class DestinyAgent {
     const topic = detectTopic(input);
     const prompt = this.buildPromptForTopic(input, topic);
 
+    // Track session
+    this.state.session.turnCount++;
+    this.state.session.lastActiveAt = new Date().toISOString();
+    this.state.history.push({
+      role: 'user', content: input, topic, timestamp: new Date().toISOString(),
+    });
+
     if (!this.llm || !prompt) {
       const fallback = this.buildFallbackResponse(topic);
+      this.state.history.push({
+        role: 'agent', content: fallback.text, topic, timestamp: new Date().toISOString(),
+      });
       yield { type: 'token', content: fallback.text };
       yield { type: 'done', topic, prompt: prompt ?? undefined };
       return;
     }
 
-    const messages: ChatMessage[] = [
-      { role: 'system', content: prompt.system },
-      { role: 'user', content: prompt.user },
-    ];
+    const messages = this.buildMessagesWithHistory(prompt);
+    let fullText = '';
 
     for await (const event of this.llm.stream(messages)) {
-      if (event.type === 'token') {
+      if (event.type === 'token' && event.content) {
+        fullText += event.content;
         yield { type: 'token', content: event.content };
       } else if (event.type === 'error') {
+        this.state.history.push({
+          role: 'agent', content: fullText || event.error || 'Stream error', topic, timestamp: new Date().toISOString(),
+        });
         yield { type: 'error', error: event.error };
         yield { type: 'done', topic, prompt: prompt ?? undefined };
         return;
       } else if (event.type === 'done') {
+        this.state.history.push({
+          role: 'agent', content: fullText, topic, timestamp: new Date().toISOString(),
+        });
         yield { type: 'done', topic, prompt: prompt ?? undefined };
         return;
       }
     }
 
+    this.state.history.push({
+      role: 'agent', content: fullText, topic, timestamp: new Date().toISOString(),
+    });
     yield { type: 'done', topic, prompt: prompt ?? undefined };
   }
 
