@@ -274,3 +274,77 @@ function buildDecisionFramework(
 
 核心原则：${framework}`;
 }
+
+// ---- Prose Renderer ----
+
+function locationNote(advice: LocationAdvice[]): string {
+  if (advice.length === 0) return '';
+
+  let text = '从五行方位来看，';
+  const top = advice.slice(0, 3);
+  text += top.map(a => `${a.location}（契合度${a.fit}分）`).join('、') + '是最有利于你的方位。';
+
+  const best = advice[0];
+  if (best && best.fit >= 9) {
+    text += `尤其是${best.location}，${best.reason}，如果在考虑搬迁或发展方向，可以重点考虑这个方位。`;
+  }
+
+  return text;
+}
+
+function phaseNote(phase: LifePhase): string {
+  return `你当前处于"${phase.name}"，${phase.description}` +
+    `这个阶段的核心任务是：${phase.focus.join('、')}。` +
+    `需要避免的是：${phase.avoid.join('、')}。`;
+}
+
+function actionPlanNote(plan: ActionPlan, currentYear: number): string {
+  let text = '接下来三年的行动框架如下：\n\n';
+
+  text += `${currentYear}年：`;
+  text += plan.year1.map(a => `${a.domain}方面——${a.action}（优先级${a.priority}）`).join('；') + '。\n\n';
+
+  text += `${currentYear + 1}年：`;
+  text += plan.year2.map(a => `${a.domain}方面——${a.action}（优先级${a.priority}）`).join('；') + '。\n\n';
+
+  text += `${currentYear + 2}年：`;
+  text += plan.year3.map(a => `${a.domain}方面——${a.action}（优先级${a.priority}）`).join('；') + '。';
+
+  return text;
+}
+
+export function renderStrategyProse(
+  result: StrategyResult,
+  _ctx: PromptContext,
+): string {
+  const paragraphs: string[] = [];
+
+  // 1. Current phase
+  paragraphs.push(
+    '人生战略的核心是"在对的时间做对的事"。' +
+    phaseNote(result.currentPhase),
+  );
+
+  // 2. Location advice
+  const locNote = locationNote(result.locationAdvice);
+  if (locNote) {
+    paragraphs.push(locNote);
+  }
+
+  // 3. Action plan
+  const currentYear = new Date().getFullYear();
+  paragraphs.push(actionPlanNote(result.actionPlan, currentYear));
+
+  // 4. Decision framework
+  paragraphs.push(result.decisionFramework);
+
+  // 5. Closing
+  paragraphs.push(
+    '战略不是一成不变的蓝图，而是一套动态的决策原则。' +
+    '命盘给了你方向和节奏的参考，但具体的每一步，需要你根据实际情况灵活调整。' +
+    '记住：运气好的时候多做事，运气平的时候多学习，运气差的时候守住底线。' +
+    '人生的主动权，始终在你手里。',
+  );
+
+  return paragraphs.join('\n\n');
+}

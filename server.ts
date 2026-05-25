@@ -123,6 +123,16 @@ async function handleChart(req: IncomingMessage, res: ServerResponse): Promise<v
         startAge: firstDayun?.startAge ?? 0,
         direction: firstDayun?.direction ?? '',
         wuxingCounts: chart.wuxingCount,
+        dayun: chart.dayun.slice(0, 8).map(d => ({
+          pillar: SEXAGENARY_NAMES[d.pillar.sexagenaryIndex],
+          startAge: d.startAge,
+          endAge: d.endAge,
+        })),
+        lifePeriods: ctx.fortune.lifePeriods.map(lp => ({
+          name: lp.name,
+          ageRange: lp.ageRange,
+          theme: lp.theme,
+        })),
       },
       analysis: {
         strength: { level: ctx.strength.level, score: ctx.strength.score },
@@ -227,6 +237,7 @@ async function handleAsk(req: IncomingMessage, res: ServerResponse): Promise<voi
 function buildChartPayload(agent: DestinyAgent): Record<string, unknown> {
   const chart = agent.state.chart;
   const bz = chart.bazi;
+  const ctx = agent.state.ctx;
   const pillars = [bz.year, bz.month, bz.day, bz.hour];
   return {
     pillars: pillars.map(p => ({
@@ -243,7 +254,17 @@ function buildChartPayload(agent: DestinyAgent): Record<string, unknown> {
       pillar: SEXAGENARY_NAMES[chart.currentDayun.pillar.sexagenaryIndex],
       startAge: chart.currentDayun.startAge,
     } : null,
-    startAge: chart.startAge,
+    startAge: chart.dayun[0]?.startAge ?? 0,
+    dayun: chart.dayun.slice(0, 8).map(d => ({
+      pillar: SEXAGENARY_NAMES[d.pillar.sexagenaryIndex],
+      startAge: d.startAge,
+      endAge: d.endAge,
+    })),
+    lifePeriods: ctx.fortune.lifePeriods.map(lp => ({
+      name: lp.name,
+      ageRange: lp.ageRange,
+      theme: lp.theme,
+    })),
   };
 }
 

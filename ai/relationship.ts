@@ -271,3 +271,98 @@ function deriveCompatibleTypes(chart: DestinyChart): string[] {
     `${wxNames[dmWx]} — 同类相吸，互相理解最深`,
   ];
 }
+
+// ---- Prose Renderer ----
+
+function emotionalStyleNote(wx: string, isYang: boolean): string {
+  const wxEmotion: Record<string, string> = {
+    '木': '木性之人在感情中像一棵树，需要扎根的土壤和向上生长的空间。你渴望的是能一起成长的关系，不是相互缠绕的寄生。你的温柔是内敛的，不善于甜言蜜语，但会用行动默默守护',
+    '火': '火性之人在感情中热烈而直接，喜欢就是喜欢，藏不住也等不了。你需要的是能回应你热情的伴侣，给你关注和肯定。但也正是因为太在乎回应，有时候容易患得患失',
+    '土': '土性之人在感情中最看重的两个字是"踏实"。你不喜欢戏剧化的起起落落，更向往细水长流的陪伴。你给的爱是实实在在的——记住对方的习惯、为共同的未来储蓄、在对方需要的时候永远在场',
+    '金': '金性之人在感情中有自己的原则和底线。你重视承诺和义气，一旦认定一个人就会坚定不移。但你的情感表达可能不够柔软，有时候会让对方觉得"你很好，但是不够温暖"',
+    '水': '水性之人在感情中灵动而深刻，善于理解和共情。你能敏锐地感知伴侣的情绪变化，并用恰到好处的方式回应。但也因为太灵活，有时候会让对方觉得捉摸不透',
+  };
+
+  return (wxEmotion[wx] ?? '') +
+    (isYang ? '。作为阳干，你在关系中更倾向于主动表达和主导节奏' : '。作为阴干，你的情感深沉而含蓄，不轻易外露但一旦投入就非常认真');
+}
+
+function idealPartnerNote(traits: string[], compatibleTypes: string[]): string {
+  let text = '从命盘来看，你理想的伴侣画像大致是这样的：';
+  text += traits.filter(t => !t.includes('五行')).join('、') + '。';
+
+  const wuxingTrait = traits.find(t => t.includes('五行'));
+  if (wuxingTrait) {
+    text += `从五行互补的角度，${wuxingTrait}。`;
+  }
+
+  if (compatibleTypes.length > 0) {
+    text += `日主方面，${compatibleTypes[0]}。${compatibleTypes[1] ? compatibleTypes[1] + '。' : ''}`;
+  }
+
+  return text;
+}
+
+function timingNote(marriageTiming: string, strength: StrengthResult): string {
+  let text = `关于缘分时机，${marriageTiming}`;
+  if (strength.level === '身弱') {
+    text += '对于身弱的人来说，选择一个能给你安全感和支持的伴侣尤为重要。不要因为外界压力而仓促决定，好的缘分值得等待。';
+  }
+  return text;
+}
+
+function riskAndAdviceNote(risks: string[], advice: string[], strengths: string[]): string {
+  let text = '';
+  if (strengths.length > 0) {
+    text += `在感情中，你的优势是${strengths.join('、')}。`;
+  }
+  if (risks.length > 0) {
+    text += `需要留意的方面：${risks.join('；')}。`;
+  }
+  text += '给感情的建议是：';
+  text += advice.join('；') + '。';
+  return text;
+}
+
+export function renderRelationshipProse(
+  result: RelationshipResult,
+  ctx: PromptContext,
+): string {
+  const { strength, structure } = ctx;
+  const dm = strength.dayMaster;
+  const paragraphs: string[] = [];
+
+  // 1. Emotional style
+  paragraphs.push(
+    `从命盘看感情，先要了解你在亲密关系中的底色。` +
+    emotionalStyleNote(dm.wuxing, dm.yinYang === '阳') +
+    `。命带${structure.primaryPattern}格局的你，在感情中也会不自觉地带着这份特质。`,
+  );
+
+  // 2. Emotional needs
+  paragraphs.push(
+    `在亲密关系中，你最核心的情感需求是：${result.emotionalNeeds.join('、')}。` +
+    '这些需求不是"作"，而是你的命盘结构决定的真实需要。' +
+    '当这些需求被满足时，你会展现出最好的自己；当长期缺失时，你会感到枯萎。' +
+    '了解自己的情感需求，才能在选择伴侣和经营关系时有的放矢。',
+  );
+
+  // 3. Ideal partner
+  paragraphs.push(idealPartnerNote(result.idealPartnerTraits, result.compatibleTypes));
+
+  // 4. Timing
+  paragraphs.push(timingNote(result.marriageTiming, strength));
+
+  // 5. Risks and advice
+  paragraphs.push(riskAndAdviceNote(result.relationshipRisks, result.advice, result.relationshipStrengths));
+
+  // 6. Closing
+  paragraphs.push(
+    '说到底，八字看的是趋势和特质，不是判决书。' +
+    '命盘可以告诉你什么样的人跟你比较合、什么时候缘分比较旺、你在感情中容易踩什么坑。' +
+    '但真正能让一段关系走得长远的，是两个人的用心经营、相互理解和共同成长。' +
+    '命理是指南针，爱是脚下的路。',
+  );
+
+  return paragraphs.join('\n\n');
+}

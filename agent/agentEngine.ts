@@ -14,10 +14,10 @@ import { analyzeClimate } from '../core/destiny/climateEngine.js';
 import { analyzeRelations } from '../core/destiny/relationEngine.js';
 import { analyzeFortune } from '../core/destiny/fortuneEngine.js';
 
-import { analyzePersonality } from '../ai/personality.js';
-import { analyzeCareer } from '../ai/career.js';
-import { analyzeRelationship } from '../ai/relationship.js';
-import { analyzeStrategy } from '../ai/strategy.js';
+import { analyzePersonality, renderPersonalityProse } from '../ai/personality.js';
+import { analyzeCareer, renderCareerProse } from '../ai/career.js';
+import { analyzeRelationship, renderRelationshipProse } from '../ai/relationship.js';
+import { analyzeStrategy, renderStrategyProse } from '../ai/strategy.js';
 import {
   buildComprehensivePrompt,
   buildPersonalityPrompt,
@@ -375,31 +375,36 @@ export class DestinyAgent {
     switch (topic) {
       case '性格':
         return {
-          text: `性格分析已生成。五行特质：${personality.coreTraits.join('、')}。MBTI倾向：${personality.mbtiTendency.join('/')}。`,
+          text: renderPersonalityProse(personality, ctx),
           topic,
           llmGenerated: false,
         };
       case '事业':
         return {
-          text: `事业分析已生成。推荐行业：${career.industries.slice(0, 3).map(i => i.industry).join('、')}。创业评分：${career.entrepreneurshipScore}/10。`,
+          text: renderCareerProse(career, ctx),
           topic,
           llmGenerated: false,
         };
       case '感情':
         return {
-          text: `感情分析已生成。依恋风格：${relationship.attachmentStyle}。情感需求：${relationship.emotionalNeeds.join('、')}。`,
+          text: renderRelationshipProse(relationship, ctx),
           topic,
           llmGenerated: false,
         };
-      case '运势':
+      case '运势': {
+        const f = ctx.fortune;
+        const yearlyText = f.yearlyAnalysis.slice(0, 3).map(y =>
+          `${y.year}年：事业${y.career}分 财富${y.wealth}分 感情${y.relationship}分 健康${y.health}分`
+        ).join('\n');
         return {
-          text: `流年运势分析已生成。当前运势：${ctx.fortune.overall.level}期，综合评分${ctx.fortune.overall.score}/100。`,
+          text: `流年运势分析\n\n当前运势处于${f.overall.level}期，综合评分${f.overall.score}/100。${f.overall.levelLabel}\n\n最佳领域：${f.overall.bestDimension}，需关注：${f.overall.riskDimension}\n\n${f.summary}\n\n近年流年得分：\n${yearlyText}\n\n${f.keyYears.best ? `最佳年份：${f.keyYears.best.year}年` : ''}${f.keyYears.worst ? `，需注意年份：${f.keyYears.worst.year}年` : ''}。`,
           topic,
           llmGenerated: false,
         };
+      }
       case '战略':
         return {
-          text: `人生战略已生成。当前阶段：${strategy.currentPhase.name}。最有利方位：${strategy.locationAdvice[0]?.location ?? '综合考量'}。`,
+          text: renderStrategyProse(strategy, ctx),
           topic,
           llmGenerated: false,
         };
@@ -419,8 +424,14 @@ export class DestinyAgent {
           ctx.climate, ctx.relations, ctx.fortune,
           { compact: true },
         );
+        const parts = [
+          renderPersonalityProse(personality, ctx),
+          renderCareerProse(career, ctx),
+          renderRelationshipProse(relationship, ctx),
+          renderStrategyProse(strategy, ctx),
+        ];
         return {
-          text: `综合命理分析已完成。格局：${ctx.structure.primaryPattern}，日主${ctx.strength.level}，运势${ctx.fortune.overall.level}期。`,
+          text: parts.join('\n\n---\n\n'),
           visualization: viz,
           topic,
           llmGenerated: false,

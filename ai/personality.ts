@@ -255,3 +255,131 @@ function deriveSocialPattern(
   }
   return '社交模式随环境调整，适应性强，能融入不同类型圈子';
 }
+
+// ---- Prose Renderer ----
+
+const WX_NATURE: Record<string, string> = {
+  '木': '木主仁，像一棵树——向上生长，扎根深远。木性之人天生有一种理想主义的气质，做事有规划，心中有远方。他们对人温和，有同理心，像春天的新芽一样总能看到希望',
+  '火': '火主礼，像一团火焰——热情、明亮、有感染力。火性之人走到哪里都是能量的中心，行动力极强，想到就去做。他们直率坦诚，不藏心思，但也因为这份热烈，有时显得急躁',
+  '土': '土主信，像大地一样——稳重、厚实、值得信赖。土性之人是最靠谱的朋友和伙伴，做事一步一个脚印，不投机不取巧。他们思维缜密，包容心强，是团队里最稳定的那块基石',
+  '金': '金主义，像一把刀——锋利、果决、有原则。金性之人天生有一股英气，做事干脆利落，是非分明。他们追求完美，对自己和他人要求都高，重承诺、讲义气',
+  '水': '水主智，像一条河——灵动、深沉、善于变通。水性之人是天生的问题解决者，适应力极强，放到什么环境都能活。他们善于沟通，思路灵活，但也因为太聪明，有时想得太多',
+};
+
+function yangNote(wx: string, isYang: boolean): string {
+  if (isYang) {
+    return `而且${wx}性阳干，气质外显，在人群中比较主动，独立性强，不轻易依赖别人。`;
+  }
+  return `而且${wx}性阴干，气质内敛，心思细腻但不轻易表露，合作性很好，善于在幕后成就事情。`;
+}
+
+function strengthNote(level: string, score: number): string {
+  switch (level) {
+    case '身弱': return `从五行力量来看，你目前属于身弱（${score}分），这意味着你对外界支持的需求比较大。你像一块优质的海绵，吸收能力强，但需要合适的环境来滋养。在熟悉和受支持的领域里，你能发挥出远超分数的实力。`;
+    case '从弱': return `你的命局属于从弱格局（${score}分），这是一种特殊的配置——不是真的"弱"，而是顺势而为反而更强。你擅长在复杂环境中借力打力，不硬碰硬，这是你的智慧。`;
+    case '中和': return `你的五行力量处于中和状态（${score}分），这是非常好的平衡。不过于刚强也不过于柔弱，意味着你的可塑性很强，大运往哪边走你就能往哪边调整。`;
+    case '身旺': return `从五行力量来看，你属于身旺（${score}分），能量充沛，承压能力强。你像一棵大树，风吹不倒。不过旺盛也需要疏导——找到合适的出口释放能量，比一味硬撑更健康。`;
+    case '从旺': return `你的命局属于从旺格局（${score}分），气势如虹。这种格局的人通常在某方面有突出天赋，顺势而上就能取得超越常人的成就。关键是找到那条"势"在哪里。`;
+    default: return `你的五行力量评分为${score}分，属于${level}。这意味着你需要根据自己的强弱特点来调整生活和工作策略。`;
+  }
+}
+
+function patternNote(pattern: string, subPattern: string | null, patternShiShen: string | null): string {
+  const base = `你的格局是${pattern}${subPattern ? '，兼带' + subPattern : ''}。`;
+  const detail: Record<string, string> = {
+    '正官': '正官格的人做事讲规矩、重信用，在体制内或规范化组织里特别能发挥优势。你天生有一种让人信服的气质，适合承担管理责任。',
+    '七杀': '七杀格的人有魄力、有冲劲，是天生的领导者。你的决断力和执行力都很强，只是七杀压力较大，需要学会自我调节，把压力转化为动力。',
+    '正财': '正财格的人务实稳重，对财富和资源有天然的敏感度。你做事脚踏实地，不喜欢虚的，一分耕耘一分收获是你的信条。',
+    '偏财': '偏财格的人商业嗅觉灵敏，善于发现机会，对市场的波动和趋势有直觉般的把握。你不太适合朝九晚五的死工资模式，更喜欢有弹性和想象空间的工作方式。',
+    '正印': '正印格的人有书卷气，好学深思，是终身学习者。你的智慧和学识是你的核心竞争力，适合深耕某个领域成为专家。',
+    '偏印': '偏印格的人思维独特，不按常理出牌，在创意和特殊技能方面有天赋。你适合走差异化路线，做别人想不到的事情。',
+    '食神': '食神格的人温和有才气，懂得享受生活和创造美好。你的创造力和审美是你的优势，适合在艺术、设计、内容创作等领域发光。',
+    '伤官': '伤官格的人才华横溢、不拘一格，是天生的创新者。你的思维跳跃，能看到别人看不到的可能性，但也要注意表达方式，避免因为太直而得罪人。',
+  };
+  return base + (patternShiShen ? (detail[patternShiShen] ?? '这个格局赋予了你独特的行事风格和人生路径。') : '这个格局赋予了你独特的行事风格和人生路径。');
+}
+
+function relationNote(relations: RelationResult): string {
+  const favRelations = relations.relations.filter(r => r.category === 'favorable');
+  const unfavRelations = relations.relations.filter(r => r.category === 'unfavorable');
+
+  let text = '在人际关系层面，命局中的十神组合揭示了你的社交模式。';
+  if (favRelations.length > 0) {
+    text += `对你有利的关系是${favRelations.map(r => r.name).join('、')}，${favRelations.map(r => r.description).join('；')}。`;
+  }
+  if (unfavRelations.length > 0) {
+    text += `需要留意的关系是${unfavRelations.map(r => r.name).join('、')}，${unfavRelations.map(r => r.description).join('；')}。`;
+  }
+  if (relations.dominantTheme) {
+    text += `整体来看，你的人际主题是"${relations.dominantTheme}"——这代表了你人生中反复出现的关系模式。`;
+  }
+  return text;
+}
+
+function mbtiNote(mbti: string[]): string {
+  return `如果对应现代心理学的人格类型，你最接近${mbti[0]}类型${mbti[1] ? '，在某些情境下也可能表现出' + mbti[1] + '的特征' : ''}。当然，八字比MBTI复杂得多，这只是一个便于理解的参考坐标。`;
+}
+
+function growthNote(strengths: string[], growthAreas: string[], decisionStyle: string): string {
+  let text = '你的核心优势在于：';
+  text += strengths.join('、') + '。';
+  if (growthAreas.length > 0) {
+    text += `成长空间方面，可以关注：${growthAreas.join('、')}。`;
+  }
+  text += `做决策时，${decisionStyle}。了解自己的决策模式，就能在关键选择时扬长避短。`;
+  return text;
+}
+
+/**
+ * Render a rule-based natural Chinese prose for personality analysis.
+ * Used as fallback when no LLM is available, or as a standalone report.
+ */
+export function renderPersonalityProse(
+  result: PersonalityResult,
+  ctx: PromptContext,
+): string {
+  const { strength, structure, relations } = ctx;
+  const dm = strength.dayMaster;
+  const wx = dm.wuxing;
+
+  const paragraphs: string[] = [];
+
+  // 1. Opening + day master introduction
+  paragraphs.push(
+    `我们先从你的日主说起。你是${dm.stem}${wx}日主，属${dm.yinYang}性。` +
+    (WX_NATURE[wx] ?? '') +
+    '。' +
+    yangNote(wx, dm.yinYang === '阳'),
+  );
+
+  // 2. Strength analysis
+  paragraphs.push(strengthNote(strength.level, strength.score));
+
+  // 3. Pattern analysis
+  paragraphs.push(patternNote(structure.primaryPattern, structure.subPattern, structure.patternShiShen));
+
+  // 4. 十神 / relations
+  paragraphs.push(relationNote(relations));
+
+  // 5. MBTI comparison
+  paragraphs.push(mbtiNote(result.mbtiTendency));
+
+  // 6. Strengths and growth
+  paragraphs.push(growthNote(result.strengths, result.growthAreas, result.decisionStyle));
+
+  // 7. Social pattern
+  paragraphs.push(
+    `在社交中，${result.socialPattern}。` +
+    `工作风格上，${result.workStyle}。` +
+    `面对压力时，${result.stressResponse}`,
+  );
+
+  // 8. Closing
+  paragraphs.push(
+    '认识自己的命盘，不是给自己贴标签，而是理解自己的"出厂设置"。' +
+    '知道了自己的天赋在哪里、盲点在哪里，就能在人生的关键路口做出更适合自己的选择。' +
+    '命理不是宿命，它是你人生地图上的等高线——告诉你哪里有山、哪里有河，但路怎么走，始终在你脚下。',
+  );
+
+  return paragraphs.join('\n\n');
+}

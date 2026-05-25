@@ -45,7 +45,7 @@ describe('DestinyAgent', () => {
     const response = agent.processQuery('我的性格是什么');
 
     expect(response.topic).toBe('性格');
-    expect(response.text).toContain('性格分析');
+    expect(response.text).toContain('日主');
     expect(response.prompt).toBeDefined();
     expect(response.prompt!.system.length).toBeGreaterThan(0);
   });
@@ -55,7 +55,7 @@ describe('DestinyAgent', () => {
     const response = agent.processQuery('我适合什么工作');
 
     expect(response.topic).toBe('事业');
-    expect(response.text).toContain('事业分析');
+    expect(response.text).toContain('核心竞争力');
   });
 
   it('should process a 感情 query', () => {
@@ -63,7 +63,7 @@ describe('DestinyAgent', () => {
     const response = agent.processQuery('我的感情运势');
 
     expect(response.topic).toBe('感情');
-    expect(response.text).toContain('感情分析');
+    expect(response.text).toContain('亲密关系');
   });
 
   it('should process a 运势 query', () => {
@@ -79,7 +79,7 @@ describe('DestinyAgent', () => {
     const response = agent.processQuery('给我一些人生建议');
 
     expect(response.topic).toBe('战略');
-    expect(response.text).toContain('人生战略');
+    expect(response.text).toContain('核心任务');
   });
 
   it('should process a 排盘 query with visualization', () => {
@@ -96,7 +96,7 @@ describe('DestinyAgent', () => {
     const response = agent.processQuery('你好');
 
     expect(response.topic).toBe('综合');
-    expect(response.text).toContain('综合命理');
+    expect(response.text).toContain('日主');
     expect(response.visualization).toBeDefined();
   });
 
@@ -119,7 +119,7 @@ describe('DestinyAgent', () => {
     expect(agent.state.history[0]!.content).toBe('我的性格特点');
     expect(agent.state.history[1]!.role).toBe('agent');
     expect(agent.state.history[1]!.topic).toBe('性格');
-    expect(agent.state.history[1]!.content).toContain('性格分析');
+    expect(agent.state.history[1]!.content).toContain('日主');
   });
 
   it('should track turn count across multiple queries', () => {
@@ -356,7 +356,7 @@ describe('DestinyAgent with LLM', () => {
 
     expect(response.topic).toBe('性格');
     expect(response.llmGenerated).toBe(false);
-    expect(response.text).toContain('性格分析');
+    expect(response.text).toContain('日主');
   });
 
   it('should process async query with fallback for all topics', async () => {
@@ -402,7 +402,7 @@ describe('DestinyAgent with LLM', () => {
       }
     }
 
-    expect(chunks.join('')).toContain('性格分析');
+    expect(chunks.join('')).toContain('日主');
   });
 
   it('should track history in processQueryStream fallback', async () => {
@@ -416,7 +416,7 @@ describe('DestinyAgent with LLM', () => {
     expect(agent.state.history[0]!.role).toBe('user');
     expect(agent.state.history[0]!.content).toBe('我的性格特点');
     expect(agent.state.history[1]!.role).toBe('agent');
-    expect(agent.state.history[1]!.content).toContain('性格分析');
+    expect(agent.state.history[1]!.content).toContain('日主');
     expect(agent.state.session.turnCount).toBe(1);
   });
 

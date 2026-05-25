@@ -339,3 +339,117 @@ function deriveCareerRisks(
 
   return risks;
 }
+
+// ---- Prose Renderer ----
+
+function careerDirectionNote(
+  industries: IndustryRecommendation[],
+  wx: string,
+): string {
+  const wxField: Record<string, string> = {
+    '木': '教育、文化、健康、环保等需要长期耕耘和滋养他人的领域',
+    '火': '互联网、媒体、能源、营销等需要传播力和感染力的领域',
+    '土': '地产、金融、农业、管理等需要稳定性和承载力的领域',
+    '金': '金融、法律、制造、审计等需要精准度和原则性的领域',
+    '水': '贸易、咨询、旅游、设计等需要灵活性和沟通力的领域',
+  };
+
+  let text = `从格局和五行来看，${wxField[wx] ?? '多元化领域'}天生适合你。`;
+
+  if (industries.length > 0) {
+    const top = industries.slice(0, 3);
+    text += `具体来说，${top.map(i => `${i.industry}（契合度${i.fit}分）`).join('、')}是最值得关注的方向。`;
+    if (industries.length > 3) {
+      text += `此外，${industries.slice(3, 6).map(i => i.industry).join('、')}等方向也值得探索。`;
+    }
+  }
+
+  return text;
+}
+
+function entrepreneurshipNote(score: number, analysis: string): string {
+  if (score >= 7) {
+    return `关于创业，你的命盘给出了比较强的支持信号（创业评分${score}/10）。${analysis}。你具备独立开创事业的核心条件，关键在于选对赛道和时机。`;
+  } else if (score >= 5) {
+    return `创业方面，你的命盘显示有一定潜力但需要更多准备（创业评分${score}/10）。${analysis}。建议先积累行业经验和人脉，等待合适的时机再出手。`;
+  } else {
+    return `创业方面，从命盘来看你可能更适合在现有体系中发展（创业评分${score}/10）。${analysis}。这并不意味着你不能拥有自己的事业，而是说稳扎稳打的路径可能更适合你。`;
+  }
+}
+
+function fortuneRhythmNote(
+  fortune: FortuneResult,
+  wealthPeaks: string[],
+): string {
+  let text = `从大运走势来看，你的事业发展有自己的节奏。当前运势处于${fortune.overall.level}期（${fortune.overall.score}分），`;
+
+  switch (fortune.overall.level) {
+    case '高峰':
+      text += '现在是天时地利人和的阶段，该进攻就大胆进攻，不要犹豫。';
+      break;
+    case '上升':
+      text += '运势正在往上走，现在做的布局和投入，未来两三年会看到回报。';
+      break;
+    case '平缓':
+      text += '这是一个适合沉淀和准备的阶段。磨刀不误砍柴工，现在积累的能力和人脉，会在下一个上升期集中爆发。';
+      break;
+    case '低谷':
+      text += '此刻不宜冒进，守住基本盘就是胜利。利用这段时间学习和提升自己，为下一次起跳蓄力。';
+      break;
+  }
+
+  if (wealthPeaks.length > 0) {
+    text += `财富积累的高峰期在${wealthPeaks.join('、')}，这些阶段要重点把握。`;
+  }
+
+  return text;
+}
+
+function riskNote(risks: string[], riskProfile: string, wealthPattern: string): string {
+  let text = `风险方面需要清醒认识。你的财富模式是"${wealthPattern}"。`;
+  text += `风险偏好属于"${riskProfile}"。`;
+  if (risks.length > 0) {
+    text += `需要留意的职业风险包括：${risks.join('；')}。提前预判、做好预案，就能平稳度过。`;
+  }
+  return text;
+}
+
+export function renderCareerProse(
+  result: CareerResult,
+  ctx: PromptContext,
+): string {
+  const { strength, structure, fortune } = ctx;
+  const dm = strength.dayMaster;
+  const paragraphs: string[] = [];
+
+  // 1. Career direction
+  paragraphs.push(
+    `${dm.stem}${dm.wuxing}日主配合${structure.primaryPattern}格局，决定了你的事业底色。` +
+    careerDirectionNote(result.industries, dm.wuxing),
+  );
+
+  // 2. Core competencies
+  paragraphs.push(
+    `你的核心竞争力在于：${result.competitiveAdvantage.join('、')}。` +
+    `在职场中，这些能力让你在${result.industries[0]?.industry ?? '适合的领域'}里尤其能发挥优势。` +
+    `日主${strength.level}的状态意味着${strength.levelLabel}，这在职业选择上是一个重要的参考维度。`,
+  );
+
+  // 3. Entrepreneurship
+  paragraphs.push(entrepreneurshipNote(result.entrepreneurshipScore, result.entrepreneurshipAnalysis));
+
+  // 4. Fortune rhythm
+  paragraphs.push(fortuneRhythmNote(fortune, result.wealthPeaks));
+
+  // 5. Risk
+  paragraphs.push(riskNote(result.careerRisks, result.riskProfile, result.wealthPattern));
+
+  // 6. Closing advice
+  paragraphs.push(
+    '事业发展的核心心法是：顺势而为。运势好的时候大胆出击，运势平的时候沉淀积累，运势差的时候守住底线。' +
+    '了解自己的五行优势和格局特点，选择与之匹配的行业和岗位，就能事半功倍。' +
+    '命理给你的是一张地图，怎么走、走多快，取决于你的选择和行动。',
+  );
+
+  return paragraphs.join('\n\n');
+}
