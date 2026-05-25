@@ -6,7 +6,7 @@
 import type { MemoryStore } from '../memory/memoryStore.js';
 import { getLifeTimeline, detectPatterns } from '../memory/eventTracker.js';
 import { getAccuracyReport } from '../memory/predictionTracker.js';
-import type { LifeEvent, Prediction, LifeDomain, LifePattern } from '../memory/types.js';
+import type { LifeDomain } from '../memory/types.js';
 
 /**
  * Render the full life timeline with events and predictions.
@@ -19,7 +19,7 @@ export function renderLifeTimeline(store: MemoryStore): string {
   lines.push('生活时间线 · Life Timeline');
   lines.push('══════════════════════════════════════');
 
-  for (const { year, events, summary } of timeline) {
+  for (const { events, summary } of timeline) {
     lines.push('');
     lines.push(`  ▸ ${summary}`);
 

@@ -6,7 +6,7 @@
 import type { DestinyChart, Wuxing } from '../core/astro/types.js';
 import type { StrengthResult } from '../core/destiny/strengthEngine.js';
 import type { StructureResult } from '../core/destiny/structureEngine.js';
-import type { RelationResult, NamedRelation } from '../core/destiny/relationEngine.js';
+import type { RelationResult } from '../core/destiny/relationEngine.js';
 import type { PromptContext, AIPrompt } from './promptBuilder.js';
 import { buildPersonalityPrompt } from './promptBuilder.js';
 
@@ -124,7 +124,7 @@ function deriveMBTITendency(
 }
 
 function deriveWorkStyle(
-  chart: DestinyChart,
+  _chart: DestinyChart,
   _structure: StructureResult,
   relations: RelationResult,
 ): string {

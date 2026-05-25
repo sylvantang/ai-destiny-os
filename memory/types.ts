@@ -7,7 +7,7 @@ import type { StrengthResult } from '../core/destiny/strengthEngine.js';
 import type { StructureResult } from '../core/destiny/structureEngine.js';
 import type { ClimateResult } from '../core/destiny/climateEngine.js';
 import type { RelationResult } from '../core/destiny/relationEngine.js';
-import type { FortuneResult, YearlyFortune } from '../core/destiny/fortuneEngine.js';
+import type { YearlyFortune } from '../core/destiny/fortuneEngine.js';
 
 // ---- User Profile ----
 

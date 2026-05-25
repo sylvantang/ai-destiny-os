@@ -10,11 +10,17 @@
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint core/"
+    "repl": "npx tsx repl.ts",
+    "typecheck": "tsc --noEmit"
   },
-  "keywords": ["bazi", "chinese-astrology", "destiny-analysis"],
+  "keywords": [
+    "bazi",
+    "chinese-astrology",
+    "destiny-analysis"
+  ],
   "license": "MIT",
   "devDependencies": {
+    "@types/node": "^25.9.1",
     "typescript": "^5.7.0",
     "vitest": "^3.1.1"
   }

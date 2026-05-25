@@ -5,7 +5,7 @@
 
 import type { BirthInfo, DestinyChart } from '../core/astro/types.js';
 import { calcBaZi, generateChart } from '../core/astro/bazi.js';
-import { calcDaYun, getCurrentDayun } from '../core/astro/dayun.js';
+import { calcDaYun } from '../core/astro/dayun.js';
 import { calcLiuNian } from '../core/astro/liunian.js';
 
 import { analyzeStrength } from '../core/destiny/strengthEngine.js';
@@ -221,7 +221,7 @@ export class DestinyAgent {
     const prompt = this.buildPromptForTopic(input, topic);
 
     // If no LLM, return deterministic summary
-    if (!this.llm || !prompt) {
+    if (!this.llm || prompt === null) {
       return { ...this.buildFallbackResponse(topic), llmGenerated: false };
     }
 
@@ -247,7 +247,7 @@ export class DestinyAgent {
       return {
         text: result.content,
         llmGenerated: true,
-        prompt,
+        prompt: prompt ?? undefined,
         topic,
         usage: result.usage,
       };
@@ -279,7 +279,7 @@ export class DestinyAgent {
     if (!this.llm || !prompt) {
       const fallback = this.buildFallbackResponse(topic);
       yield { type: 'token', content: fallback.text };
-      yield { type: 'done', topic, prompt };
+      yield { type: 'done', topic, prompt: prompt ?? undefined };
       return;
     }
 
@@ -293,15 +293,15 @@ export class DestinyAgent {
         yield { type: 'token', content: event.content };
       } else if (event.type === 'error') {
         yield { type: 'error', error: event.error };
-        yield { type: 'done', topic, prompt };
+        yield { type: 'done', topic, prompt: prompt ?? undefined };
         return;
       } else if (event.type === 'done') {
-        yield { type: 'done', topic, prompt };
+        yield { type: 'done', topic, prompt: prompt ?? undefined };
         return;
       }
     }
 
-    yield { type: 'done', topic, prompt };
+    yield { type: 'done', topic, prompt: prompt ?? undefined };
   }
 
   /**
@@ -311,15 +311,15 @@ export class DestinyAgent {
     input: string,
     topic: QueryDomain,
   ): AIPrompt | null {
-    const { ctx, personality, career, relationship, strategy } = this.state;
+    const { ctx } = this.state;
 
     switch (topic) {
       case '性格':
-        return buildPersonalityPrompt(ctx, personality);
+        return buildPersonalityPrompt(ctx);
       case '事业':
-        return buildCareerPrompt(ctx, career);
+        return buildCareerPrompt(ctx);
       case '感情':
-        return buildRelationshipPrompt(ctx, relationship);
+        return buildRelationshipPrompt(ctx);
       case '运势':
         return buildYearlyFortunePrompt(ctx, new Date().getFullYear());
       case '战略':

@@ -6,7 +6,7 @@
 
 import type { DestinyChart } from '../core/astro/types.js';
 import { formatBaZi } from '../core/astro/bazi.js';
-import { SEXAGENARY_NAMES, ALL_STEMS } from '../core/astro/constants.js';
+import { SEXAGENARY_NAMES } from '../core/astro/constants.js';
 import type { StrengthResult } from '../core/destiny/strengthEngine.js';
 import type { StructureResult } from '../core/destiny/structureEngine.js';
 import type { ClimateResult } from '../core/destiny/climateEngine.js';

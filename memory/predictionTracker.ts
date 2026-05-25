@@ -3,7 +3,7 @@
 // Track predictions vs actual outcomes to improve accuracy.
 // ============================================================
 
-import type { Prediction, LifeDomain, YearlyRecord } from './types.js';
+import type { Prediction, LifeDomain } from './types.js';
 import type { MemoryStore } from './memoryStore.js';
 import type { YearlyFortune } from '../core/destiny/fortuneEngine.js';
 

@@ -5,11 +5,9 @@
 // ============================================================
 
 import type { DestinyChart, Wuxing } from '../core/astro/types.js';
-import { ALL_STEMS, SEXAGENARY_NAMES } from '../core/astro/constants.js';
+import { SEXAGENARY_NAMES } from '../core/astro/constants.js';
 import type { StrengthResult } from '../core/destiny/strengthEngine.js';
-import type { StructureResult } from '../core/destiny/structureEngine.js';
 import type { ClimateResult } from '../core/destiny/climateEngine.js';
-import type { RelationResult } from '../core/destiny/relationEngine.js';
 import type { FortuneResult } from '../core/destiny/fortuneEngine.js';
 import type { PromptContext, AIPrompt } from './promptBuilder.js';
 import { buildStrategyPrompt } from './promptBuilder.js';
@@ -70,7 +68,7 @@ export function analyzeStrategy(
   relationship: RelationshipResult,
   question?: string,
 ): StrategyResult {
-  const { chart, strength, structure, climate, fortune } = ctx;
+  const { chart, strength, climate, fortune } = ctx;
 
   const locationAdvice = analyzeLocations(chart, climate, strength);
   const currentPhase = analyzeCurrentPhase(chart, fortune, strength);
@@ -150,11 +148,10 @@ function analyzeCurrentPhase(
   _strength: StrengthResult,
 ): LifePhase {
   const currentDayun = chart.currentDayun;
-  const score = fortune.overall.score;
   const level = fortune.overall.level;
 
   const dayunName = currentDayun
-    ? SEXAGENARY_NAMES[currentDayun.pillar.sexagenaryIndex]
+    ? (SEXAGENARY_NAMES[currentDayun.pillar.sexagenaryIndex] ?? '大运')
     : '当前大运';
 
   let description: string;
@@ -190,7 +187,7 @@ function analyzeCurrentPhase(
 // ---- Action Plan ----
 
 function buildActionPlan(
-  chart: DestinyChart,
+  _chart: DestinyChart,
   fortune: FortuneResult,
   career: CareerResult,
   relationship: RelationshipResult,

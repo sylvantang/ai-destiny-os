@@ -3,7 +3,7 @@
 // Text-based Four Pillars chart rendering with ANSI color.
 // ============================================================
 
-import type { DestinyChart, BaZi, Pillar, Wuxing, HeavenlyStemIndex } from '../core/astro/types.js';
+import type { DestinyChart, BaZi, Wuxing } from '../core/astro/types.js';
 import { HIDDEN_STEMS, SEXAGENARY_NAMES, getShiShen } from '../core/astro/constants.js';
 
 // ANSI color codes for Wuxing
@@ -76,11 +76,6 @@ function formatPillarHeaders(): string {
 function formatSeparator(): string {
   const cols = ['年柱', '月柱', '日柱', '时柱'];
   return cols.map(() => '─'.repeat(20)).join('┼');
-}
-
-function pillarStemBranch(p: Pillar): string {
-  const sexagenaryName = SEXAGENARY_NAMES[p.sexagenaryIndex] ?? '??';
-  return `${colorWx(p.stem.wuxing, p.stem.name)}${colorWx(p.branch.wuxing, p.branch.name)} ${sexagenaryName}`;
 }
 
 function formatStemRow(bazi: BaZi): string {

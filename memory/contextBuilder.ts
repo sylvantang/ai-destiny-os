@@ -4,7 +4,7 @@
 // Bridges the Memory System → AI Interpretation Layer.
 // ============================================================
 
-import type { MemoryContext, LifeEvent, LifePattern, AccuracySummary, LifeDomain } from './types.js';
+import type { MemoryContext } from './types.js';
 import type { MemoryStore } from './memoryStore.js';
 import { buildMemoryContext } from './eventTracker.js';
 import { getAccuracyReport, getDueVerifications, getActivePredictions } from './predictionTracker.js';

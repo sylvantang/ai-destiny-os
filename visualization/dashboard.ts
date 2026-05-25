@@ -3,16 +3,14 @@
 // Integrated view combining all analysis dimensions.
 // ============================================================
 
-import type { DestinyChart, Wuxing, BaZi } from '../core/astro/types.js';
+import type { DestinyChart } from '../core/astro/types.js';
 import { SEXAGENARY_NAMES } from '../core/astro/constants.js';
 import type { StrengthResult } from '../core/destiny/strengthEngine.js';
 import type { StructureResult } from '../core/destiny/structureEngine.js';
 import type { ClimateResult } from '../core/destiny/climateEngine.js';
 import type { RelationResult } from '../core/destiny/relationEngine.js';
-import type { FortuneResult, YearlyFortune } from '../core/destiny/fortuneEngine.js';
-import type { PersonalityResult } from '../ai/personality.js';
-import type { CareerResult } from '../ai/career.js';
-import type { MemorySnapshot, MemoryStats } from '../memory/types.js';
+import type { FortuneResult } from '../core/destiny/fortuneEngine.js';
+import type { MemoryStats } from '../memory/types.js';
 import { renderChart, colorWx } from './chartRenderer.js';
 import { renderFortuneTimeline } from './fortuneTimeline.js';
 

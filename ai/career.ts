@@ -4,7 +4,6 @@
 // ============================================================
 
 import type { DestinyChart, Wuxing } from '../core/astro/types.js';
-import { ALL_STEMS } from '../core/astro/constants.js';
 import type { StrengthResult } from '../core/destiny/strengthEngine.js';
 import type { StructureResult } from '../core/destiny/structureEngine.js';
 import type { ClimateResult } from '../core/destiny/climateEngine.js';
@@ -129,7 +128,7 @@ export function analyzeCareer(ctx: PromptContext): CareerResult {
 function determineFavorableElements(
   chart: DestinyChart,
   strength: StrengthResult,
-  structure: StructureResult,
+  _structure: StructureResult,
   climate: ClimateResult,
 ): Wuxing[] {
   const elements = new Set<Wuxing>();
@@ -174,7 +173,7 @@ function recommendIndustries(favorableElements: Wuxing[]): IndustryRecommendatio
 }
 
 function evalEntrepreneurship(
-  chart: DestinyChart,
+  _chart: DestinyChart,
   strength: StrengthResult,
   _structure: StructureResult,
   relations: RelationResult,

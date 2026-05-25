@@ -47,7 +47,7 @@ export function createConversation(agent: DestinyAgent): ConversationState {
 }
 
 function buildSummary(agent: DestinyAgent): ConversationSummary {
-  const { ctx, personality, strategy } = agent.state;
+  const { ctx } = agent.state;
 
   return {
     dayMaster: `${ctx.chart.dayMaster.name}${ctx.chart.dayMasterWuxing}`,

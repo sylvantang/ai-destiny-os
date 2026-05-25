@@ -4,6 +4,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "lib": ["ES2022"],
+    "types": ["node"],
     "rootDir": ".",
     "outDir": "dist",
     "declaration": true,
@@ -17,6 +18,12 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true
   },
-  "include": ["core/**/*.ts"],
+  "include": [
+    "core/**/*.ts",
+    "agent/**/*.ts",
+    "ai/**/*.ts",
+    "memory/**/*.ts",
+    "visualization/**/*.ts"
+  ],
   "exclude": ["node_modules", "dist", "**/__tests__/**"]
 }

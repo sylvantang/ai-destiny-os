@@ -4,7 +4,6 @@
 // ============================================================
 
 import type { DestinyChart, Wuxing } from '../core/astro/types.js';
-import { getShiShen, ALL_STEMS } from '../core/astro/constants.js';
 import type { StrengthResult } from '../core/destiny/strengthEngine.js';
 import type { StructureResult } from '../core/destiny/structureEngine.js';
 import type { RelationResult } from '../core/destiny/relationEngine.js';
@@ -122,8 +121,6 @@ function deriveIdealPartnerTraits(
   _strength: StrengthResult,
   structure: StructureResult,
 ): string[] {
-  const dm = chart.dayMaster.index;
-
   // Ideal partner elements: the one that generates the day master (印) or is controlled by day master (财)
   const traits: string[] = [];
 
@@ -150,7 +147,6 @@ function deriveIdealPartnerTraits(
   }
 
   // Based on day master
-  const dmName = ALL_STEMS[dm]!.name;
   const dmWx = chart.dayMasterWuxing;
   const generator: Record<Wuxing, Wuxing> = { '木': '水', '火': '木', '土': '火', '金': '土', '水': '金' };
 

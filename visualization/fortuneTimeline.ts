@@ -22,7 +22,6 @@ export function renderFortuneTimeline(fortune: FortuneResult): string {
     const marker = isCurrent ? '▶' : ' ';
     const bar = yearBar(yf);
     const score = averageScore(yf);
-    const level = scoreLevel(score);
     const daYunLabel = yf.daiyunPillar
       ? SEXAGENARY_NAMES[yf.daiyunPillar.pillar.sexagenaryIndex] ?? '—'
       : '  ';
@@ -76,7 +75,6 @@ export function renderDayunCycles(dayun: DaYunPillar[]): string {
   lines.push('├──────┼──────────┼───────────┼───────────┼───────────┼──────┤');
 
   for (const dy of dayun.slice(0, 8)) {
-    const name = SEXAGENARY_NAMES[dy.pillar.sexagenaryIndex] ?? '??';
     const stem = dy.pillar.stem;
     const branch = dy.pillar.branch;
 
