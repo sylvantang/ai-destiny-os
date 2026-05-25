@@ -1,0 +1,339 @@
+// ============================================================
+// AI Destiny OS — Agent Layer: Agent Engine (AI 命理师)
+// Top-level orchestrator: chart → destiny → AI → memory → viz.
+// ============================================================
+
+import type { BirthInfo, DestinyChart } from '../core/astro/types.js';
+import { calcBaZi, generateChart } from '../core/astro/bazi.js';
+import { calcDaYun, getCurrentDayun } from '../core/astro/dayun.js';
+import { calcLiuNian } from '../core/astro/liunian.js';
+
+import { analyzeStrength } from '../core/destiny/strengthEngine.js';
+import { analyzeStructure } from '../core/destiny/structureEngine.js';
+import { analyzeClimate } from '../core/destiny/climateEngine.js';
+import { analyzeRelations } from '../core/destiny/relationEngine.js';
+import { analyzeFortune } from '../core/destiny/fortuneEngine.js';
+
+import { analyzePersonality } from '../ai/personality.js';
+import { analyzeCareer } from '../ai/career.js';
+import { analyzeRelationship } from '../ai/relationship.js';
+import { analyzeStrategy } from '../ai/strategy.js';
+import {
+  buildComprehensivePrompt,
+  buildPersonalityPrompt,
+  buildCareerPrompt,
+  buildRelationshipPrompt,
+  buildStrategyPrompt,
+  buildYearlyFortunePrompt,
+} from '../ai/promptBuilder.js';
+import type { PromptContext, AIPrompt } from '../ai/promptBuilder.js';
+import type { PersonalityResult } from '../ai/personality.js';
+import type { CareerResult } from '../ai/career.js';
+import type { RelationshipResult } from '../ai/relationship.js';
+import type { StrategyResult } from '../ai/strategy.js';
+
+import { MemoryStore } from '../memory/memoryStore.js';
+import { logYearlyPredictions } from '../memory/predictionTracker.js';
+import { buildEnrichedContext, formatMemoryForPrompt } from '../memory/contextBuilder.js';
+
+import type { DashboardOptions } from '../visualization/dashboard.js';
+import { renderDashboard } from '../visualization/dashboard.js';
+import { renderChart } from '../visualization/chartRenderer.js';
+
+// ---- Agent State ----
+
+export interface AgentState {
+  birth: BirthInfo;
+  chart: DestinyChart;
+  ctx: PromptContext;
+  personality: PersonalityResult;
+  career: CareerResult;
+  relationship: RelationshipResult;
+  strategy: StrategyResult;
+  /** Memory store (optional, created on demand) */
+  memory: MemoryStore | null;
+  /** Conversation history */
+  history: ConversationTurn[];
+  /** Session metadata */
+  session: SessionMeta;
+}
+
+export interface ConversationTurn {
+  role: 'user' | 'agent';
+  content: string;
+  topic?: string;
+  timestamp: string;
+}
+
+export interface SessionMeta {
+  id: string;
+  createdAt: string;
+  lastActiveAt: string;
+  turnCount: number;
+}
+
+export type QueryDomain = '性格' | '事业' | '感情' | '运势' | '战略' | '综合' | '排盘';
+
+export interface AgentResponse {
+  /** Text response */
+  text: string;
+  /** The specific AI prompt (ready for LLM) if applicable */
+  prompt?: AIPrompt;
+  /** Topic extracted from query */
+  topic: QueryDomain;
+  /** Optional visualization */
+  visualization?: string;
+  /** Memory-enriched context */
+  memoryContext?: string;
+}
+
+// ---- Agent Class ----
+
+export class DestinyAgent {
+  state: AgentState;
+
+  constructor(birth: BirthInfo) {
+    const bazi = calcBaZi(birth);
+    const chart = generateChart(birth);
+    const dayun = calcDaYun(birth, bazi.month, bazi.year.stemIndex);
+
+    // Use current year ±5 for LiuNian
+    const currentYear = new Date().getFullYear();
+    const liunian = calcLiuNian(bazi, currentYear, currentYear + 5);
+
+    const strength = analyzeStrength(bazi);
+    const structure = analyzeStructure(bazi, strength);
+    const climate = analyzeClimate(bazi);
+    const relations = analyzeRelations(bazi);
+    const fortune = analyzeFortune(bazi, strength, structure, climate, relations, dayun, liunian);
+
+    const ctx: PromptContext = { chart, strength, structure, climate, relations, fortune };
+
+    const personality = analyzePersonality(ctx);
+    const career = analyzeCareer(ctx);
+    const relationship = analyzeRelationship(ctx);
+    const strategy = analyzeStrategy(ctx, personality, career, relationship);
+
+    this.state = {
+      birth,
+      chart,
+      ctx,
+      personality,
+      career,
+      relationship,
+      strategy,
+      memory: null,
+      history: [],
+      session: {
+        id: `session_${Date.now()}`,
+        createdAt: new Date().toISOString(),
+        lastActiveAt: new Date().toISOString(),
+        turnCount: 0,
+      },
+    };
+  }
+
+  // ---- Query Processing ----
+
+  /**
+   * Process a user query and return an agent response.
+   * Routes to the appropriate AI module based on topic detection.
+   */
+  processQuery(input: string): AgentResponse {
+    const topic = detectTopic(input);
+    this.state.session.turnCount++;
+    this.state.session.lastActiveAt = new Date().toISOString();
+
+    this.state.history.push({
+      role: 'user',
+      content: input,
+      topic,
+      timestamp: new Date().toISOString(),
+    });
+
+    const response = this.buildResponse(input, topic);
+
+    this.state.history.push({
+      role: 'agent',
+      content: response.text,
+      topic,
+      timestamp: new Date().toISOString(),
+    });
+
+    return response;
+  }
+
+  private buildResponse(input: string, topic: QueryDomain): AgentResponse {
+    const { ctx, personality, career, relationship, strategy } = this.state;
+
+    switch (topic) {
+      case '性格': {
+        const prompt = buildPersonalityPrompt(ctx, personality);
+        return {
+          text: `性格分析已生成。五行特质：${personality.coreTraits.join('、')}。MBTI倾向：${personality.mbtiTendency.join('/')}。`,
+          prompt,
+          topic,
+        };
+      }
+      case '事业': {
+        const prompt = buildCareerPrompt(ctx, career);
+        return {
+          text: `事业分析已生成。推荐行业：${career.industries.slice(0, 3).map(i => i.industry).join('、')}。创业评分：${career.entrepreneurshipScore}/10。`,
+          prompt,
+          topic,
+        };
+      }
+      case '感情': {
+        const prompt = buildRelationshipPrompt(ctx, relationship);
+        return {
+          text: `感情分析已生成。依恋风格：${relationship.attachmentStyle}。情感需求：${relationship.emotionalNeeds.join('、')}。`,
+          prompt,
+          topic,
+        };
+      }
+      case '运势': {
+        const prompt = buildYearlyFortunePrompt(ctx);
+        return {
+          text: `流年运势分析已生成。当前运势：${ctx.fortune.overall.level}期，综合评分${ctx.fortune.overall.score}/100。`,
+          prompt,
+          topic,
+        };
+      }
+      case '战略': {
+        const prompt = buildStrategyPrompt(ctx, input);
+        return {
+          text: `人生战略已生成。当前阶段：${strategy.currentPhase.name}。最有利方位：${strategy.locationAdvice[0]?.location ?? '综合考量'}。`,
+          prompt,
+          topic,
+        };
+      }
+      case '排盘': {
+        const viz = renderChart(this.state.chart);
+        return {
+          text: `命盘排盘完成。日主${this.state.chart.dayMaster.name}${this.state.chart.dayMasterWuxing}。`,
+          visualization: viz,
+          topic,
+        };
+      }
+      case '综合':
+      default: {
+        const prompt = buildComprehensivePrompt(ctx);
+        const viz = renderDashboard(
+          ctx.chart, ctx.strength, ctx.structure,
+          ctx.climate, ctx.relations, ctx.fortune,
+          { compact: true },
+        );
+        return {
+          text: `综合命理分析已完成。格局：${ctx.structure.primaryPattern}，日主${ctx.strength.level}，运势${ctx.fortune.overall.level}期。`,
+          prompt,
+          visualization: viz,
+          topic,
+        };
+      }
+    }
+  }
+
+  // ---- Memory Integration ----
+
+  /**
+   * Enable memory tracking by loading or creating a memory store.
+   */
+  enableMemory(userId?: string): MemoryStore {
+    const id = userId ?? `user_${this.state.birth.year}${this.state.birth.month}${this.state.birth.day}`;
+    this.state.memory = new MemoryStore(id, this.state.birth);
+    return this.state.memory;
+  }
+
+  /**
+   * Load an existing memory store from JSON.
+   */
+  loadMemory(json: string): void {
+    this.state.memory = MemoryStore.fromJSON(json);
+  }
+
+  /**
+   * Log current year predictions into memory.
+   */
+  logPredictions(): void {
+    if (!this.state.memory) this.enableMemory();
+    const year = new Date().getFullYear();
+    const yearlyFortune = this.state.ctx.fortune.yearlyAnalysis.find(y => y.year === year) ?? null;
+    logYearlyPredictions(this.state.memory!, year, yearlyFortune);
+  }
+
+  /**
+   * Build a memory-enriched response with personal history context.
+   */
+  processQueryWithMemory(input: string): AgentResponse {
+    if (!this.state.memory) this.enableMemory();
+
+    const response = this.processQuery(input);
+    const enriched = buildEnrichedContext(this.state.memory!, this.state.ctx);
+    response.memoryContext = formatMemoryForPrompt(enriched);
+
+    return response;
+  }
+
+  // ---- Dashboard ----
+
+  /**
+   * Render the full destiny dashboard.
+   */
+  renderDashboard(options?: DashboardOptions): string {
+    const { ctx } = this.state;
+    return renderDashboard(
+      ctx.chart, ctx.strength, ctx.structure,
+      ctx.climate, ctx.relations, ctx.fortune,
+      options,
+    );
+  }
+
+  /**
+   * Render just the four pillars chart.
+   */
+  renderChart(): string {
+    return renderChart(this.state.chart);
+  }
+
+  // ---- Session ----
+
+  /**
+   * Get conversation history summary.
+   */
+  getSessionSummary(): string {
+    const { session, history } = this.state;
+    const topics = history
+      .filter(t => t.role === 'user')
+      .map(t => t.topic ?? '综合');
+
+    return [
+      `会话ID: ${session.id}`,
+      `创建时间: ${session.createdAt.slice(0, 10)}`,
+      `对话轮次: ${session.turnCount}`,
+      `讨论主题: ${[...new Set(topics)].join('、')}`,
+    ].join('\n');
+  }
+}
+
+// ---- Topic Detection ----
+
+const TOPIC_KEYWORDS: [QueryDomain, string[]][] = [
+  ['性格', ['性格', '个性', '特点', '是什么样的人', 'mbti', '五行', '特质']],
+  ['事业', ['事业', '工作', '职业', '行业', '创业', '跳槽', '升职', '求职']],
+  ['感情', ['感情', '爱情', '婚姻', '恋爱', '对象', '桃花', '配偶', '脱单']],
+  ['运势', ['运势', '流年', '今年', '明年', '运气', '财运', '健康运', '走势']],
+  ['战略', ['战略', '方向', '选择', '建议', '决策', '计划', '规划', '发展']],
+  ['排盘', ['排盘', '八字', '四柱', '命盘', '盘面', '显示', '查看']],
+];
+
+function detectTopic(input: string): QueryDomain {
+  const lower = input.toLowerCase();
+
+  for (const [domain, keywords] of TOPIC_KEYWORDS) {
+    for (const kw of keywords) {
+      if (lower.includes(kw)) return domain;
+    }
+  }
+
+  return '综合';
+}

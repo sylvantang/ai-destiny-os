@@ -1,0 +1,21 @@
+{
+  "name": "ai-destiny-os",
+  "version": "0.1.0",
+  "description": "AI Destiny OS - Professional BaZi Analysis Engine",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint core/"
+  },
+  "keywords": ["bazi", "chinese-astrology", "destiny-analysis"],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.1.1"
+  }
+}
