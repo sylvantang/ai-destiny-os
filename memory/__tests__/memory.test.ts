@@ -21,7 +21,7 @@ function createTestStore(): MemoryStore {
 function createMockPromptContext(): PromptContext {
   return {
     chart: { dayMasterWuxing: '木', dayMaster: { name: '乙', wuxing: '木', yinYang: '阴' } } as unknown as DestinyChart,
-    strength: { score: 45, level: '身弱', breakdown: { monthOrder: 5, roots: 15, stemSupport: 10, branchSupport: 8, weakening: -2 }, analysis: '' },
+    strength: { strengthScore: 45, level: '偏弱', breakdown: { monthOrder: 5, roots: 15, stemSupport: 10, branchSupport: 8, weakening: -2 }, analysis: '' },
     structure: { primaryPattern: '偏财格', isSpecial: false, isFavorable: true, analysis: '' },
     climate: { needsAdjustment: false, neededWuxing: null, adjustment: '无需调候', analysis: '' },
     relations: { favorableCombos: [], unfavorableCombos: [], analysis: '' },

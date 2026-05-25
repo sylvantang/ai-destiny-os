@@ -45,7 +45,7 @@ const birth: BirthInfo = {
 
 const bazi = calcBaZi(birth);
 const chart = generateChart(birth);
-const dayun = calcDaYun(birth, bazi.month, bazi.year.stemIndex);
+const dayun = calcDaYun(birth, bazi.month, bazi.year.stemIndex, bazi.day.stemIndex);
 const liunian = calcLiuNian(bazi, 2024, 2029);
 const strength = analyzeStrength(bazi);
 const structure = analyzeStructure(bazi, strength);

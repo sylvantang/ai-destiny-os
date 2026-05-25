@@ -89,7 +89,7 @@ export function analyzeStructure(
       patternShiShen: dominantShiShen,
       patternStem: dominantStem,
       isSpecial: true,
-      isFavorable: strength.level === '身弱',
+      isFavorable: strength.level === '偏弱',
       analysis,
     };
   }
@@ -112,7 +112,7 @@ export function analyzeStructure(
   // Generally: weak day master favors 印/比, strong favors 官/财/食伤
   let isFavorable = false;
   if (dominantShiShen) {
-    if (strength.level === '身弱') {
+    if (strength.level === '偏弱') {
       isFavorable = dominantShiShen === '正印' || dominantShiShen === '偏印' || dominantShiShen === '比肩' || dominantShiShen === '劫财';
     } else {
       isFavorable = true; // all patterns work for strong day masters

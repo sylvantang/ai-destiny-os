@@ -1,24 +1,30 @@
 // ============================================================
 // AI Destiny OS — Destiny Engine: Strength Analysis (旺衰引擎)
-// Produces structured JSON describing Day Master strength.
+// Evaluates day master strength considering month order, roots,
+// stem/branch support, weakening, and earthly branch interactions.
 // ============================================================
 
 import type { BaZi, EarthlyBranchIndex } from '../astro/types.js';
 import { ALL_STEMS, HIDDEN_STEMS } from '../astro/constants.js';
+import { isClash, isCombination, COMBINATION_WUXING, getPunishment, isHarm } from '../astro/earthlyBranchRelations.js';
 
 // ---- Types ----
 
-export type StrengthLevel = '从弱' | '身弱' | '中和' | '身旺' | '从旺';
+export type StrengthLevel = '从弱' | '偏弱' | '中和' | '偏旺' | '从旺';
+
+export interface StrengthFactor {
+  name: string;
+  category: 'support' | 'weaken' | 'interaction';
+  score: number;
+  description: string;
+}
 
 export interface StrengthResult {
-  dayMaster: {
-    stem: string;
-    wuxing: string;
-    yinYang: string;
-  };
-  score: number;
+  dayMaster: { stem: string; wuxing: string; yinYang: string };
+  strengthScore: number;
   level: StrengthLevel;
   levelLabel: string;
+  factors: StrengthFactor[];
   monthOrder: {
     branch: string;
     wuxing: string;
@@ -26,29 +32,10 @@ export interface StrengthResult {
     score: number;
     description: string;
   };
-  roots: Array<{
-    pillar: string;
-    branch: string;
-    stem: string;
-    depth: string;
-    score: number;
-  }>;
-  stemSupport: Array<{
-    pillar: string;
-    stem: string;
-    relation: string;
-    score: number;
-  }>;
-  branchSupport: {
-    score: number;
-    description: string;
-  };
-  weakening: Array<{
-    pillar: string;
-    stem: string;
-    reason: string;
-    score: number;
-  }>;
+  roots: Array<{ pillar: string; branch: string; stem: string; depth: string; score: number }>;
+  stemSupport: Array<{ pillar: string; stem: string; relation: string; score: number }>;
+  branchSupport: { score: number; description: string };
+  weakening: Array<{ pillar: string; stem: string; reason: string; score: number }>;
   scoring: {
     base: number;
     monthOrder: number;
@@ -65,9 +52,9 @@ export interface StrengthResult {
 
 const LEVEL_LABELS: Record<StrengthLevel, string> = {
   '从弱': '日主极弱，顺从克泄耗之势，不宜生扶',
-  '身弱': '日主偏弱，喜生扶助力，忌克泄耗',
+  '偏弱': '日主偏弱，喜生扶助力，忌克泄耗',
   '中和': '日主不弱不旺，平衡为贵，大运走向决定强弱',
-  '身旺': '日主偏旺，喜克泄耗平衡，忌再生扶',
+  '偏旺': '日主偏旺，喜克泄耗平衡，忌再生扶',
   '从旺': '日主极旺，顺其旺势，不宜克制',
 };
 
@@ -78,37 +65,47 @@ export function analyzeStrength(bazi: BaZi): StrengthResult {
   const dmStem = ALL_STEMS[dm]!;
   const dmWx = dmStem.wuxing;
 
-  // 1. Month Order
-  const monthBranch = bazi.month.branch;
-  const monthOrder = analyzeMonthOrder(dmWx, monthBranch.wuxing, monthBranch.name);
-
-  // 2. Roots (通根)
+  const monthOrder = analyzeMonthOrder(dmWx, bazi.month.branch.wuxing, bazi.month.branch.name);
   const roots = analyzeRoots(bazi, dm);
-
-  // 3. Stem Support (天干助力)
   const stemSupport = analyzeStemSupport(bazi, dmWx);
-
-  // 4. Branch Support (地支助力)
   const branchSupport = analyzeBranchSupport(bazi, dmWx);
-
-  // 5. Weakening (克制因素)
   const weakening = analyzeWeakening(bazi, dmWx);
 
-  // Calculate total
-  const base = 35;
-  const total =
-    base +
-    monthOrder.score +
-    roots.reduce((s, r) => s + r.score, 0) +
-    stemSupport.reduce((s, r) => s + r.score, 0) +
-    branchSupport.score -
-    weakening.reduce((s, w) => s + w.score, 0);
+  // 刑冲合害 interaction factors
+  const interactions = analyzeInteractions(bazi, dmWx);
 
-  const clampedScore = Math.max(0, Math.min(100, total));
+  // Assemble all factors into a flat array
+  const factors: StrengthFactor[] = [
+    { name: '月令', category: 'support', score: monthOrder.score, description: monthOrder.description },
+    { name: '基础分', category: 'support', score: 35, description: '基础旺衰分' },
+    ...roots.map(r => ({
+      name: `通根·${r.pillar}`,
+      category: 'support' as const,
+      score: r.score,
+      description: `${r.pillar}${r.branch}藏${r.stem}(${r.depth})`,
+    })),
+    ...stemSupport.map(s => ({
+      name: `天干·${s.pillar}`,
+      category: 'support' as const,
+      score: s.score,
+      description: `${s.pillar}${s.stem}${s.relation}`,
+    })),
+    { name: '地支助力', category: 'support', score: branchSupport.score, description: branchSupport.description },
+    ...weakening.map(w => ({
+      name: `克制·${w.pillar}`,
+      category: 'weaken' as const,
+      score: -w.score,
+      description: `${w.pillar}${w.stem}${w.reason}`,
+    })),
+    ...interactions,
+  ];
+
+  const totalScore = factors.reduce((sum, f) => sum + f.score, 0);
+  const clampedScore = Math.max(0, Math.min(100, totalScore));
   const level = scoreToLevel(clampedScore);
 
   const scoring = {
-    base,
+    base: 35,
     monthOrder: monthOrder.score,
     roots: roots.reduce((s, r) => s + r.score, 0),
     stemSupport: stemSupport.reduce((s, r) => s + r.score, 0),
@@ -118,14 +115,11 @@ export function analyzeStrength(bazi: BaZi): StrengthResult {
   };
 
   return {
-    dayMaster: {
-      stem: dmStem.name,
-      wuxing: dmWx,
-      yinYang: dmStem.yinYang,
-    },
-    score: clampedScore,
+    dayMaster: { stem: dmStem.name, wuxing: dmWx, yinYang: dmStem.yinYang },
+    strengthScore: clampedScore,
     level,
     levelLabel: LEVEL_LABELS[level],
+    factors,
     monthOrder,
     roots,
     stemSupport,
@@ -134,6 +128,91 @@ export function analyzeStrength(bazi: BaZi): StrengthResult {
     scoring,
     summary: buildSummary(dmStem.name, dmWx, clampedScore, level, monthOrder, roots, stemSupport, weakening),
   };
+}
+
+// ---- 刑冲合害 Analysis ----
+
+function analyzeInteractions(bazi: BaZi, dmWx: string): StrengthFactor[] {
+  const branches: Array<{ label: string; idx: EarthlyBranchIndex }> = [
+    { label: '年支', idx: bazi.year.branchIndex },
+    { label: '月支', idx: bazi.month.branchIndex },
+    { label: '日支', idx: bazi.day.branchIndex },
+    { label: '时支', idx: bazi.hour.branchIndex },
+  ];
+
+  const factors: StrengthFactor[] = [];
+
+  // Check all 6 branch pairs (年-月, 年-日, 年-时, 月-日, 月-时, 日-时)
+  for (let i = 0; i < branches.length; i++) {
+    for (let j = i + 1; j < branches.length; j++) {
+      const a = branches[i]!;
+      const b = branches[j]!;
+
+      // 六冲: weakens both, reduces stability. Score: -8
+      if (isClash(a.idx, b.idx)) {
+        factors.push({
+          name: `${a.label}${b.label}相冲`,
+          category: 'interaction',
+          score: -8,
+          description: `${a.label}与${b.label}六冲，根基不稳`,
+        });
+        continue;
+      }
+
+      // 六合: can be favorable or unfavorable depending on whether the
+      // combined element supports the day master. Score: +/-5
+      if (isCombination(a.idx, b.idx)) {
+        const key = `${a.idx},${b.idx}`;
+        const combinedWx = COMBINATION_WUXING[key] ?? '';
+        const supports = combinedWx === dmWx || generates(combinedWx, dmWx);
+        factors.push({
+          name: `${a.label}${b.label}相合`,
+          category: 'interaction',
+          score: supports ? 5 : -5,
+          description: supports
+            ? `${a.label}${b.label}六合，化${combinedWx}生扶日主`
+            : `${a.label}${b.label}六合，化${combinedWx}削弱日主`,
+        });
+        continue;
+      }
+
+      // 三刑: always unfavorable. Score: -6
+      const punishment = getPunishment(a.idx, b.idx);
+      if (punishment) {
+        factors.push({
+          name: `${a.label}${b.label}相刑`,
+          category: 'interaction',
+          score: -6,
+          description: `${a.label}与${b.label}${punishment}`,
+        });
+        continue;
+      }
+
+      // 六害: mildly unfavorable. Score: -4
+      if (isHarm(a.idx, b.idx)) {
+        factors.push({
+          name: `${a.label}${b.label}相害`,
+          category: 'interaction',
+          score: -4,
+          description: `${a.label}与${b.label}六害`,
+        });
+      }
+    }
+  }
+
+  // 自刑: -4 if any branch is a self-punishment type
+  for (const br of branches) {
+    if (br.idx === 4 || br.idx === 6 || br.idx === 9 || br.idx === 11) {
+      factors.push({
+        name: `${br.label}自刑`,
+        category: 'interaction',
+        score: -4,
+        description: `${br.label}自刑，内在矛盾`,
+      });
+    }
+  }
+
+  return factors;
 }
 
 // ---- Analyzers ----
@@ -216,19 +295,9 @@ function analyzeStemSupport(bazi: BaZi, dmWx: string) {
   for (const p of pillars) {
     const swx = ALL_STEMS[p.stemIdx]!.wuxing;
     if (swx === dmWx) {
-      support.push({
-        pillar: p.label,
-        stem: p.stem,
-        relation: '比劫相助',
-        score: 8,
-      });
+      support.push({ pillar: p.label, stem: p.stem, relation: '比劫相助', score: 8 });
     } else if (generates(swx, dmWx)) {
-      support.push({
-        pillar: p.label,
-        stem: p.stem,
-        relation: '印星生扶',
-        score: 6,
-      });
+      support.push({ pillar: p.label, stem: p.stem, relation: '印星生扶', score: 6 });
     }
   }
 
@@ -271,19 +340,9 @@ function analyzeWeakening(bazi: BaZi, dmWx: string) {
   for (const p of pillars) {
     const swx = ALL_STEMS[p.stemIdx]!.wuxing;
     if (controls(swx, dmWx)) {
-      weakening.push({
-        pillar: p.label,
-        stem: p.stem,
-        reason: `官杀克身（${swx}克${dmWx}）`,
-        score: 8,
-      });
+      weakening.push({ pillar: p.label, stem: p.stem, reason: `官杀克身（${swx}克${dmWx}）`, score: 8 });
     } else if (generates(dmWx, swx)) {
-      weakening.push({
-        pillar: p.label,
-        stem: p.stem,
-        reason: `食伤泄气（${dmWx}生${swx}）`,
-        score: 5,
-      });
+      weakening.push({ pillar: p.label, stem: p.stem, reason: `食伤泄气（${dmWx}生${swx}）`, score: 5 });
     }
   }
 
@@ -366,8 +425,8 @@ function controls(from: string, to: string): boolean {
 
 function scoreToLevel(score: number): StrengthLevel {
   if (score <= 15) return '从弱';
-  if (score <= 40) return '身弱';
+  if (score <= 40) return '偏弱';
   if (score <= 60) return '中和';
-  if (score <= 85) return '身旺';
+  if (score <= 85) return '偏旺';
   return '从旺';
 }

@@ -279,10 +279,13 @@ async function loadChart() {
 
   currentChart = data.chart;
   renderChart(data);
-  renderRadarChart(data.chart.wuxingCounts);
-  renderTimelineChart(data.chart.dayun || [], data.chart.lifePeriods || []);
+
+  // MUST show containers BEFORE init ECharts — otherwise they have 0 dimensions
   document.getElementById('chart-card').classList.add('active');
   document.getElementById('analysis-card').classList.add('active');
+
+  renderRadarChart(data.chart.wuxingCounts);
+  renderTimelineChart(data.chart.dayun || [], data.chart.lifePeriods || []);
 
   // Quick-ask buttons
   document.getElementById('quick-asks').innerHTML = [
@@ -435,18 +438,28 @@ const TIMELINE_COLORS = {
   '综合': '#8b949e',
 };
 
+function ensureECharts() {
+  if (typeof echarts === 'undefined') {
+    console.warn('ECharts not loaded yet');
+    return false;
+  }
+  return true;
+}
+
 function renderRadarChart(wuxingCounts) {
+  if (!ensureECharts()) return;
   const dom = document.getElementById('radar-chart');
-  if (!dom) return;
-  if (!radarChart) radarChart = echarts.init(dom);
-  else radarChart.resize();
+  if (!dom || dom.offsetParent === null) return; // not visible yet
+
+  if (radarChart) radarChart.dispose();
+  radarChart = echarts.init(dom);
 
   const wuxing = ['木', '火', '土', '金', '水'];
   const values = wuxing.map(w => wuxingCounts[w] ?? 0);
   const maxVal = Math.max(...values, 8);
 
   radarChart.setOption({
-    backgroundColor: 'transparent',
+    backgroundColor: '#0d1117',
     title: {
       text: '五行能量分布',
       left: 'center',
@@ -507,36 +520,36 @@ function renderRadarChart(wuxingCounts) {
 }
 
 function renderTimelineChart(dayun, lifePeriods) {
-  const dom = document.getElementById('timeline-chart');
-  if (!dom || dayun.length === 0) return;
-  if (!timelineChart) timelineChart = echarts.init(dom);
-  else timelineChart.resize();
+  if (!ensureECharts()) return;
+  var dom = document.getElementById('timeline-chart');
+  if (!dom || dayun.length === 0 || dom.offsetParent === null) return;
 
-  // Compute birth year from form data
-  const birthYear = +document.getElementById('f-year').value;
-  const currentYear = new Date().getFullYear();
-  const currentAge = currentYear - birthYear;
+  if (timelineChart) timelineChart.dispose();
+  timelineChart = echarts.init(dom);
 
-  const maxAge = Math.max(85, dayun[dayun.length - 1].endAge + 5);
+  var birthYear = +document.getElementById('f-year').value;
+  var currentYear = new Date().getFullYear();
+  var currentAge = currentYear - birthYear;
 
-  // Stacked bar approach: invisible spacers + colored blocks
-  const spacers = dayun.map(d => d.startAge);
-  const durations = dayun.map(d => Math.max(d.endAge - d.startAge, 0.5));
+  var maxAge = Math.max(85, dayun[dayun.length - 1].endAge + 5);
 
-  // Build block metadata for labels and tooltips
-  const blockMeta = dayun.map((dy, i) => {
-    const lp = lifePeriods[i];
-    const theme = lp ? lp.theme : '综合';
+  // Each dayun gets its own y-axis row — like a Gantt chart swimlane
+  var rowNames = dayun.map(function(d) { return d.pillar; });
+
+  // Build metadata indexed by row
+  var blockMeta = dayun.map(function(dy, i) {
+    var lp = lifePeriods[i];
+    var theme = lp ? lp.theme : '综合';
     return {
       name: dy.pillar,
-      ageRange: `${dy.startAge.toFixed(1)}-${dy.endAge.toFixed(1)}岁`,
+      ageRange: dy.startAge.toFixed(1) + '-' + dy.endAge.toFixed(1) + '岁',
       theme: theme,
       color: TIMELINE_COLORS[theme] || TIMELINE_COLORS['综合'],
     };
   });
 
   timelineChart.setOption({
-    backgroundColor: 'transparent',
+    backgroundColor: '#0d1117',
     title: {
       text: '人生大运时间轴',
       left: 'center',
@@ -544,104 +557,101 @@ function renderTimelineChart(dayun, lifePeriods) {
       textStyle: { color: '#c9d1d9', fontSize: 15, fontWeight: 600 },
     },
     tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'shadow' },
+      trigger: 'item',
       backgroundColor: 'rgba(22,27,34,0.95)',
       borderColor: '#30363d',
       textStyle: { color: '#c9d1d9', fontSize: 13 },
-      formatter: function(ps) {
-        const block = ps.find(p => p.seriesName === '大运');
-        if (!block) return '';
-        const meta = blockMeta[block.dataIndex];
+      formatter: function(p) {
+        var meta = blockMeta[p.dataIndex];
         if (!meta) return '';
-        return `<b>${meta.name}</b><br/>${meta.ageRange}<br/>主题：${meta.theme}`;
+        return '<b>' + meta.name + '</b><br/>' + meta.ageRange + '<br/>主题：' + meta.theme;
       },
     },
-    grid: { left: 18, right: 18, top: 60, bottom: 50 },
+    grid: { left: 8, right: 20, top: 60, bottom: 40 },
     xAxis: {
       type: 'value',
       min: 0,
       max: maxAge,
       axisLine: { lineStyle: { color: '#30363d' } },
-      axisTick: { alignWithLabel: true },
       axisLabel: {
         color: '#8b949e',
         fontSize: 11,
         formatter: '{value}岁',
-        margin: 8,
+        margin: 6,
       },
       splitLine: { lineStyle: { color: '#21262d', type: 'dashed' } },
     },
     yAxis: {
       type: 'category',
-      data: ['大运'],
+      data: rowNames,
+      inverse: true,
       axisLine: { lineStyle: { color: '#30363d' } },
       axisTick: { show: false },
-      axisLabel: { color: '#8b949e', fontSize: 11 },
+      axisLabel: { color: '#8b949e', fontSize: 10 },
     },
-    series: [
-      // Invisible spacers — push colored blocks to the right start position
-      {
-        name: 'spacer',
-        type: 'bar',
-        stack: 'dayun',
-        barWidth: '55%',
-        data: spacers.map(v => ({ value: v, itemStyle: { color: 'transparent' } })),
-        label: { show: false },
-        emphasis: { itemStyle: { color: 'transparent' } },
+    series: [{
+      type: 'custom',
+      renderItem: function(params, api) {
+        var i = params.dataIndex;        // row index = dayun index
+        var startAge = api.value(0);
+        var endAge = api.value(1);
+        var row = i;                      // each data point sits on its own y-axis row
+
+        var startCoord = api.coord([startAge, row]);
+        var endCoord = api.coord([endAge, row]);
+
+        var bandH = api.size([0, 1])[1];
+        var barH = bandH * 0.6;
+        var y = startCoord[1] - barH / 2;
+        var w = Math.max(endCoord[0] - startCoord[0], 3);
+
+        var meta = blockMeta[i];
+        var color = meta ? meta.color : '#8b949e';
+
+        var children = [{
+          type: 'rect',
+          shape: { x: startCoord[0], y: y, width: w, height: barH, r: 4 },
+          style: { fill: color, opacity: 0.85 },
+        }];
+
+        // Label inside block: name + age range
+        if (w > 24) {
+          var labelText = w > 40 ? meta.name + '  ' + meta.ageRange : meta.name;
+          children.push({
+            type: 'text',
+            style: {
+              text: labelText,
+              x: startCoord[0] + w / 2,
+              y: startCoord[1],
+              textAlign: 'center',
+              textVerticalAlign: 'middle',
+              fill: '#fff',
+              fontSize: w > 40 ? 11 : 9,
+              fontWeight: 500,
+            },
+          });
+        }
+
+        return { type: 'group', children: children };
       },
-      // Colored dayun blocks
-      {
-        name: '大运',
-        type: 'bar',
-        stack: 'dayun',
-        barWidth: '55%',
-        data: durations.map((v, i) => ({
-          value: v,
-          itemStyle: {
-            color: blockMeta[i].color,
-            borderRadius: v < 2 ? [0, 0, 0, 0] : [3, 3, 3, 3],
-            opacity: 0.88,
-          },
-        })),
+      data: dayun.map(function(d) { return [d.startAge, d.endAge]; }),
+      // Vertical line at current age
+      markLine: {
+        silent: true,
+        symbol: 'none',
+        lineStyle: { color: '#e55', width: 2, type: 'solid' },
         label: {
           show: true,
-          position: 'insideRight',
-          color: '#fff',
-          fontSize: 11,
-          fontWeight: 500,
-          formatter: function(p) {
-            const meta = blockMeta[p.dataIndex];
-            const w = durations[p.dataIndex];
-            if (w < 2.5) return '';
-            if (w < 5) return meta.name;
-            return `${meta.name}\n${meta.ageRange}`;
-          },
+          formatter: '当前 ' + currentAge + '岁',
+          color: '#e55',
+          fontSize: 12,
+          fontWeight: 600,
+          position: 'start',
+          distance: 6,
         },
-        markLine: {
-          silent: true,
-          symbol: 'none',
-          lineStyle: { color: '#e55', width: 2, type: 'solid' },
-          label: {
-            formatter: `当前 ${currentAge}岁`,
-            color: '#e55',
-            fontSize: 12,
-            fontWeight: 600,
-            position: 'insideStartTop',
-            distance: 8,
-          },
-          data: [{ xAxis: currentAge }],
-        },
-        markPoint: {
-          silent: true,
-          symbol: 'triangle',
-          symbolSize: [14, 10],
-          symbolRotate: 180,
-          itemStyle: { color: '#e55' },
-          data: [{ name: '当前', coord: [currentAge, 0] }],
-        },
+        data: [{ xAxis: currentAge }],
       },
-    ],
+    }],
   });
 }
 

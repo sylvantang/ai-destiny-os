@@ -26,7 +26,7 @@ import { calcDaYun, getCurrentDayun } from './dayun.js';
  * The year changes at 立春 (Start of Spring), NOT at the lunar new year
  * or Gregorian Jan 1.
  */
-function calcYearPillar(date: Date, isDST: boolean): Pillar {
+function calcYearPillar(date: Date, isDST: boolean, dmIdx: HeavenlyStemIndex): Pillar {
   const adjustedDate = isDST
     ? new Date(date.getTime() - 1 * 60 * 60 * 1000)
     : new Date(date.getTime());
@@ -53,7 +53,7 @@ function calcYearPillar(date: Date, isDST: boolean): Pillar {
   const stemIdx = stemFromSexagenary(yearIndex);
   const branchIdx = branchFromSexagenary(yearIndex);
 
-  return buildPillar(stemIdx, branchIdx, yearIndex);
+  return buildPillar(stemIdx, branchIdx, yearIndex, dmIdx);
 }
 
 // ---- Month Pillar ----
@@ -67,6 +67,7 @@ function calcMonthPillar(
   date: Date,
   isDST: boolean,
   yearStem: HeavenlyStemIndex,
+  dmIdx: HeavenlyStemIndex,
 ): Pillar {
   const adjustedDate = isDST
     ? new Date(date.getTime() - 1 * 60 * 60 * 1000)
@@ -105,7 +106,7 @@ function calcMonthPillar(
   const monthStem = ((monthStemStart + monthOrder) % 10) as HeavenlyStemIndex;
 
   const sexIdx = sexagenaryIndex(monthStem, monthBranch);
-  return buildPillar(monthStem, monthBranch, sexIdx);
+  return buildPillar(monthStem, monthBranch, sexIdx, dmIdx);
 }
 
 // ---- Day Pillar ----
@@ -117,11 +118,10 @@ const DAY_PILLAR_REFERENCE = {
 };
 
 /**
- * Calculate the day pillar (日柱).
- * The sexagenary day cycle has been continuous for thousands of years.
- * We count days from a known reference date.
+ * Calculate the day stem index without building a full Pillar.
+ * Used to get dmIdx before constructing other pillars.
  */
-function calcDayPillar(date: Date, isDST: boolean): Pillar {
+function calcDayStemIndex(date: Date, isDST: boolean): HeavenlyStemIndex {
   const adjustedDate = isDST
     ? new Date(date.getTime() - 1 * 60 * 60 * 1000)
     : new Date(date.getTime());
@@ -129,7 +129,35 @@ function calcDayPillar(date: Date, isDST: boolean): Pillar {
   const refDate = DAY_PILLAR_REFERENCE.date;
   const refIdx = DAY_PILLAR_REFERENCE.sexagenaryIndex;
 
-  // Count days between reference and birth date (UTC-based, no DST issues)
+  const birthUTC = Date.UTC(
+    adjustedDate.getUTCFullYear(),
+    adjustedDate.getUTCMonth(),
+    adjustedDate.getUTCDate(),
+  );
+
+  const refUTC = Date.UTC(
+    refDate.getUTCFullYear(),
+    refDate.getUTCMonth(),
+    refDate.getUTCDate(),
+  );
+
+  const dayDiff = Math.round((birthUTC - refUTC) / (24 * 60 * 60 * 1000));
+  const dayIndex = ((refIdx + dayDiff) % 60 + 60) % 60;
+
+  return stemFromSexagenary(dayIndex);
+}
+
+/**
+ * Calculate the day pillar (日柱).
+ */
+function calcDayPillar(date: Date, isDST: boolean, dmIdx: HeavenlyStemIndex): Pillar {
+  const adjustedDate = isDST
+    ? new Date(date.getTime() - 1 * 60 * 60 * 1000)
+    : new Date(date.getTime());
+
+  const refDate = DAY_PILLAR_REFERENCE.date;
+  const refIdx = DAY_PILLAR_REFERENCE.sexagenaryIndex;
+
   const birthUTC = Date.UTC(
     adjustedDate.getUTCFullYear(),
     adjustedDate.getUTCMonth(),
@@ -148,7 +176,7 @@ function calcDayPillar(date: Date, isDST: boolean): Pillar {
   const stemIdx = stemFromSexagenary(dayIndex);
   const branchIdx = branchFromSexagenary(dayIndex);
 
-  return buildPillar(stemIdx, branchIdx, dayIndex);
+  return buildPillar(stemIdx, branchIdx, dayIndex, dmIdx);
 }
 
 // ---- Hour Pillar ----
@@ -164,6 +192,7 @@ function calcHourPillar(
   longitude: number,
   isDST: boolean,
   dayStem: HeavenlyStemIndex,
+  dmIdx: HeavenlyStemIndex,
 ): Pillar {
   // Get the hour branch from true solar time
   const hourBranch = getHourBranch(date, longitude, isDST) as EarthlyBranchIndex;
@@ -173,7 +202,7 @@ function calcHourPillar(
   const hourStem = ((hourStemStart + hourBranch) % 10) as HeavenlyStemIndex;
 
   const sexIdx = sexagenaryIndex(hourStem, hourBranch);
-  return buildPillar(hourStem, hourBranch, sexIdx);
+  return buildPillar(hourStem, hourBranch, sexIdx, dmIdx);
 }
 
 // ---- Helpers ----
@@ -182,6 +211,7 @@ function buildPillar(
   stemIdx: HeavenlyStemIndex,
   branchIdx: EarthlyBranchIndex,
   sexIdx: SexagenaryIndex,
+  dmIdx: HeavenlyStemIndex,
 ): Pillar {
   return {
     stem: getStem(stemIdx),
@@ -191,6 +221,7 @@ function buildPillar(
     sexagenaryIndex: sexIdx,
     hiddenStems: getHiddenStems(branchIdx),
     nayin: getNayin(sexIdx),
+    shiShen: getShiShen(dmIdx, stemIdx),
   };
 }
 
@@ -211,27 +242,13 @@ export function calcBaZi(birth: BirthInfo): BaZi {
     birth.minute,
   );
 
-  // Calculate pillars in dependency order:
-  // Year first (needed for month stem)
-  // Day second (needed for hour stem)
-  // Then month and hour
+  // Determine day master index first (needed for 十神 on all pillars)
+  const dmIdx = calcDayStemIndex(birthDate, birth.isDST);
 
-  const yearPillar = calcYearPillar(birthDate, birth.isDST);
-  const dayPillar = calcDayPillar(birthDate, birth.isDST);
-  const monthPillar = calcMonthPillar(birthDate, birth.isDST, yearPillar.stemIndex);
-  const hourPillar = calcHourPillar(
-    birthDate,
-    birth.longitude,
-    birth.isDST,
-    dayPillar.stemIndex,
-  );
-
-  // Compute shiShen (十神) for each pillar relative to the day master
-  const dmIdx = dayPillar.stemIndex;
-  yearPillar.shiShen = getShiShen(dmIdx, yearPillar.stemIndex);
-  monthPillar.shiShen = getShiShen(dmIdx, monthPillar.stemIndex);
-  dayPillar.shiShen = getShiShen(dmIdx, dayPillar.stemIndex);
-  hourPillar.shiShen = getShiShen(dmIdx, hourPillar.stemIndex);
+  const dayPillar = calcDayPillar(birthDate, birth.isDST, dmIdx);
+  const yearPillar = calcYearPillar(birthDate, birth.isDST, dmIdx);
+  const monthPillar = calcMonthPillar(birthDate, birth.isDST, yearPillar.stemIndex, dmIdx);
+  const hourPillar = calcHourPillar(birthDate, birth.longitude, birth.isDST, dayPillar.stemIndex, dmIdx);
 
   return {
     year: yearPillar,
@@ -249,7 +266,7 @@ export function generateChart(birth: BirthInfo): DestinyChart {
   const wuxingCount = countWuxing(bazi);
 
   // Calculate DaYun
-  const dayun = calcDaYun(birth, bazi.month, bazi.year.stemIndex);
+  const dayun = calcDaYun(birth, bazi.month, bazi.year.stemIndex, bazi.day.stemIndex);
 
   // Current age
   const birthDate = new Date(birth.year, birth.month - 1, birth.day);

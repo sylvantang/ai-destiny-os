@@ -84,7 +84,7 @@ function deriveAttachmentStyle(
     style += '。阴干内敛，情感深沉但表达含蓄';
   }
 
-  if (strength.level === '身弱') {
+  if (strength.level === '偏弱') {
     style += '，有时需要伴侣更多的情感确认';
   }
 
@@ -109,7 +109,7 @@ function deriveEmotionalNeeds(
 
   needs.push(...(wxNeeds[wx] ?? ['理解与尊重']));
 
-  if (strength.level === '身弱' || strength.level === '从弱') {
+  if (strength.level === '偏弱' || strength.level === '从弱') {
     needs.push('需要更多的支持和鼓励');
   }
 
@@ -228,7 +228,7 @@ function deriveRelationshipAdvice(
 ): string[] {
   const advice: string[] = [];
 
-  if (strength.level === '身弱') {
+  if (strength.level === '偏弱') {
     advice.push('选择能给予支持和鼓励的伴侣，建立安全的情感基础');
   }
 
@@ -305,8 +305,8 @@ function idealPartnerNote(traits: string[], compatibleTypes: string[]): string {
 
 function timingNote(marriageTiming: string, strength: StrengthResult): string {
   let text = `关于缘分时机，${marriageTiming}`;
-  if (strength.level === '身弱') {
-    text += '对于身弱的人来说，选择一个能给你安全感和支持的伴侣尤为重要。不要因为外界压力而仓促决定，好的缘分值得等待。';
+  if (strength.level === '偏弱') {
+    text += '对于偏弱的人来说，选择一个能给你安全感和支持的伴侣尤为重要。不要因为外界压力而仓促决定，好的缘分值得等待。';
   }
   return text;
 }

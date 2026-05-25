@@ -24,10 +24,11 @@ export function calcLiuNian(
   startYear: number,
   endYear: number,
 ): LiuNian[] {
+  const dmIdx = bazi.day.stemIndex;
   const results: LiuNian[] = [];
 
   for (let year = startYear; year <= endYear; year++) {
-    const yearPillar = getYearPillar(year);
+    const yearPillar = getYearPillar(year, dmIdx);
     const scores = calcYearScores(bazi, yearPillar);
 
     results.push({
@@ -46,10 +47,11 @@ export function calcLiuNian(
  * Each month's pillar is determined by the year stem and the solar term.
  */
 export function calcLiuYue(
-  _bazi: BaZi,
+  bazi: BaZi,
   year: number,
 ): { month: number; pillar: Pillar }[] {
-  const yearPillar = getYearPillar(year);
+  const dmIdx = bazi.day.stemIndex;
+  const yearPillar = getYearPillar(year, dmIdx);
   const yearStem = yearPillar.stemIndex;
   const results: { month: number; pillar: Pillar }[] = [];
 
@@ -81,6 +83,7 @@ export function calcLiuYue(
         sexagenaryIndex: sexIdx,
         hiddenStems: getHiddenStems(branchIdx),
         nayin: getNayin(sexIdx),
+        shiShen: getShiShen(dmIdx, stemIdx),
       },
     });
   }
@@ -93,6 +96,7 @@ export function calcLiuYue(
  */
 export function calcLiuRi(
   date: Date,
+  dayMasterIndex: HeavenlyStemIndex,
 ): Pillar {
   // Reference: 1900-01-01 was 甲戌日 (index 10)
   const refDate = new Date(Date.UTC(1900, 0, 1));
@@ -124,12 +128,13 @@ export function calcLiuRi(
     sexagenaryIndex: dayIndex as SexagenaryIndex,
     hiddenStems: getHiddenStems(branchIdx),
     nayin: getNayin(dayIndex as SexagenaryIndex),
+    shiShen: getShiShen(dayMasterIndex, stemIdx),
   };
 }
 
 // ---- Internal helpers ----
 
-function getYearPillar(year: number): Pillar {
+function getYearPillar(year: number, dmIdx: HeavenlyStemIndex): Pillar {
   // 公元4年为甲子年
   const yearIndex = ((year - 4) % 60 + 60) % 60;
   const stemIdx = (yearIndex % 10) as HeavenlyStemIndex;
@@ -143,6 +148,7 @@ function getYearPillar(year: number): Pillar {
     sexagenaryIndex: yearIndex as SexagenaryIndex,
     hiddenStems: getHiddenStems(branchIdx),
     nayin: getNayin(yearIndex as SexagenaryIndex),
+    shiShen: getShiShen(dmIdx, stemIdx),
   };
 }
 

@@ -104,7 +104,7 @@ export class DestinyAgent {
 
     const bazi = calcBaZi(birth);
     const chart = generateChart(birth);
-    const dayun = calcDaYun(birth, bazi.month, bazi.year.stemIndex);
+    const dayun = calcDaYun(birth, bazi.month, bazi.year.stemIndex, bazi.day.stemIndex);
 
     // Use current year ±5 for LiuNian
     const currentYear = new Date().getFullYear();

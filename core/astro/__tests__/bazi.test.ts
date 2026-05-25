@@ -106,6 +106,59 @@ describe('ShiShen (十神)', () => {
     // 甲(阳木) ← 壬(阳水): 水生木
     expect(getShiShen(0, 8)).toBe('偏印');
   });
+
+  it('all 100 dayMaster × target combinations should return valid ShiShen', () => {
+    // Complete 10×10 mapping table
+    const expected: Record<number, Record<number, string>> = {
+      0: { 0: '比肩', 1: '劫财', 2: '食神', 3: '伤官', 4: '偏财', 5: '正财', 6: '七杀', 7: '正官', 8: '偏印', 9: '正印' },
+      1: { 0: '劫财', 1: '比肩', 2: '伤官', 3: '食神', 4: '正财', 5: '偏财', 6: '正官', 7: '七杀', 8: '正印', 9: '偏印' },
+      2: { 0: '偏印', 1: '正印', 2: '比肩', 3: '劫财', 4: '食神', 5: '伤官', 6: '偏财', 7: '正财', 8: '七杀', 9: '正官' },
+      3: { 0: '正印', 1: '偏印', 2: '劫财', 3: '比肩', 4: '伤官', 5: '食神', 6: '正财', 7: '偏财', 8: '正官', 9: '七杀' },
+      4: { 0: '七杀', 1: '正官', 2: '偏印', 3: '正印', 4: '比肩', 5: '劫财', 6: '食神', 7: '伤官', 8: '偏财', 9: '正财' },
+      5: { 0: '正官', 1: '七杀', 2: '正印', 3: '偏印', 4: '劫财', 5: '比肩', 6: '伤官', 7: '食神', 8: '正财', 9: '偏财' },
+      6: { 0: '偏财', 1: '正财', 2: '七杀', 3: '正官', 4: '偏印', 5: '正印', 6: '比肩', 7: '劫财', 8: '食神', 9: '伤官' },
+      7: { 0: '正财', 1: '偏财', 2: '正官', 3: '七杀', 4: '正印', 5: '偏印', 6: '劫财', 7: '比肩', 8: '伤官', 9: '食神' },
+      8: { 0: '食神', 1: '伤官', 2: '偏财', 3: '正财', 4: '七杀', 5: '正官', 6: '偏印', 7: '正印', 8: '比肩', 9: '劫财' },
+      9: { 0: '伤官', 1: '食神', 2: '正财', 3: '偏财', 4: '正官', 5: '七杀', 6: '正印', 7: '偏印', 8: '劫财', 9: '比肩' },
+    };
+
+    for (let dm = 0; dm < 10; dm++) {
+      for (let tgt = 0; tgt < 10; tgt++) {
+        const result = getShiShen(dm as HeavenlyStemIndex, tgt as HeavenlyStemIndex);
+        const exp = expected[dm]![tgt];
+        expect(result).toBe(exp);
+      }
+    }
+  });
+
+  it('all dayun pillars should have non-null shiShen', () => {
+    const birth: BirthInfo = {
+      year: 1993, month: 7, day: 23, hour: 9, minute: 30,
+      longitude: 116.4, isDST: false, gender: '男',
+    };
+    const bazi = calcBaZi(birth);
+    const dayun = calcDaYun(birth, bazi.month, bazi.year.stemIndex, bazi.day.stemIndex);
+
+    for (const dy of dayun) {
+      expect(dy.pillar.shiShen).toBeDefined();
+      const validShiShens = ['比肩', '劫财', '食神', '伤官', '正财', '偏财', '正官', '七杀', '正印', '偏印'];
+      expect(validShiShens).toContain(dy.pillar.shiShen);
+    }
+  });
+
+  it('all four pillars in BaZi should have valid shiShen', () => {
+    const birth: BirthInfo = {
+      year: 1993, month: 7, day: 23, hour: 9, minute: 30,
+      longitude: 116.4, isDST: false, gender: '男',
+    };
+    const bazi = calcBaZi(birth);
+    const validShiShens = ['比肩', '劫财', '食神', '伤官', '正财', '偏财', '正官', '七杀', '正印', '偏印'];
+
+    expect(validShiShens).toContain(bazi.year.shiShen);
+    expect(validShiShens).toContain(bazi.month.shiShen);
+    expect(bazi.day.shiShen).toBe('比肩'); // day master relative to itself
+    expect(validShiShens).toContain(bazi.hour.shiShen);
+  });
 });
 
 // ---- Hidden Stems Tests ----
@@ -269,7 +322,7 @@ describe('DaYun (大运)', () => {
     };
 
     const bazi = calcBaZi(birth);
-    const dayun = calcDaYun(birth, bazi.month, bazi.year.stemIndex);
+    const dayun = calcDaYun(birth, bazi.month, bazi.year.stemIndex, bazi.day.stemIndex);
 
     expect(dayun.length).toBe(10);
     expect(dayun[0]!.startAge).toBeGreaterThan(0);
@@ -295,7 +348,7 @@ describe('DaYun (大运)', () => {
     };
 
     const bazi = calcBaZi(birth);
-    const dayun = calcDaYun(birth, bazi.month, bazi.year.stemIndex);
+    const dayun = calcDaYun(birth, bazi.month, bazi.year.stemIndex, bazi.day.stemIndex);
 
     expect(dayun[0]!.direction).toBe('逆排');
   });

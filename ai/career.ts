@@ -139,13 +139,13 @@ function determineFavorableElements(
   }
 
   // Strength-based: weak needs support (生我/同我), strong needs drain (我生/我克/克我)
-  if (strength.level === '身弱' || strength.level === '从弱') {
+  if (strength.level === '偏弱' || strength.level === '从弱') {
     // Favor elements that generate or match the day master
     const dmWx = chart.dayMasterWuxing;
     const generators: Record<Wuxing, Wuxing> = { '木': '水', '火': '木', '土': '火', '金': '土', '水': '金' };
     elements.add(generators[dmWx]!);
     elements.add(dmWx);
-  } else if (strength.level === '身旺' || strength.level === '从旺') {
+  } else if (strength.level === '偏旺' || strength.level === '从旺') {
     // Favor elements that the day master generates, controls, or is controlled by
     const dmWx = chart.dayMasterWuxing;
     const generated: Record<Wuxing, Wuxing> = { '木': '火', '火': '土', '土': '金', '金': '水', '水': '木' };
@@ -194,10 +194,10 @@ function evalEntrepreneurship(
   }
 
   // Strong day master → can handle entrepreneurship stress
-  if (strength.level === '身旺' || strength.level === '从旺') {
+  if (strength.level === '偏旺' || strength.level === '从旺') {
     score += 1;
-    reasons.push('身旺能担财官，承压能力强');
-  } else if (strength.level === '身弱' || strength.level === '从弱') {
+    reasons.push('偏旺能担财官，承压能力强');
+  } else if (strength.level === '偏弱' || strength.level === '从弱') {
     score -= 1;
     reasons.push('身偏弱，创业需合伙或贵人扶持');
   }
@@ -264,12 +264,12 @@ function deriveRiskProfile(
   const hasCaiHuaiYin = relations.relations.some(r => r.name === '财坏印');
   const hasBiJieDuoCai = relations.relations.some(r => r.name === '比劫夺财');
 
-  if (strength.level === '身旺' || strength.level === '从旺') {
+  if (strength.level === '偏旺' || strength.level === '从旺') {
     return hasCaiHuaiYin
       ? '高风险偏好，但需注意为钱损学。建议投资前充分调研。'
       : '高风险偏好，能承担较大波动。适合权益类投资和创业投资。';
   }
-  if (strength.level === '身弱' || strength.level === '从弱') {
+  if (strength.level === '偏弱' || strength.level === '从弱') {
     return hasBiJieDuoCai
       ? '偏保守型，需防合作破财。建议稳健理财，避免高风险投资。'
       : '偏保守型，适合稳健增值策略。优先考虑固定收益和保险配置。';

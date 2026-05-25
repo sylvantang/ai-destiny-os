@@ -23,7 +23,9 @@
     "agent/**/*.ts",
     "ai/**/*.ts",
     "memory/**/*.ts",
-    "visualization/**/*.ts"
+    "visualization/**/*.ts",
+    "data/**/*.ts",
+    "server.ts"
   ],
   "exclude": ["node_modules", "dist", "**/__tests__/**"]
 }

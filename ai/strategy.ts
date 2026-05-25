@@ -125,7 +125,7 @@ function analyzeLocations(
 
   // Strength-based
   let favorableWx: Wuxing[];
-  if (strength.level === '身弱' || strength.level === '从弱') {
+  if (strength.level === '偏弱' || strength.level === '从弱') {
     favorableWx = [gen, same]; // Need support
   } else {
     favorableWx = [generated[dmWx]!, gen]; // Need expression or support

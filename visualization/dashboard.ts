@@ -125,14 +125,14 @@ function renderKeyMetrics(
   const scoreBar = '█'.repeat(Math.round(fortune.overall.score / 5))
     + '░'.repeat(20 - Math.round(fortune.overall.score / 5));
 
-  const strengthColor = strength.level === '身旺' || strength.level === '从旺' ? '31' :
-    strength.level === '身弱' || strength.level === '从弱' ? '34' : '33';
+  const strengthColor = strength.level === '偏旺' || strength.level === '从旺' ? '31' :
+    strength.level === '偏弱' || strength.level === '从弱' ? '34' : '33';
 
   return strip(`
 ┌──────────────────────────┬──────────────────────────┬──────────────────────────┐
 │     💪 身强 Strength       │     📊 格局 Structure       │     📈 运势 Fortune         │
 ├──────────────────────────┼──────────────────────────┼──────────────────────────┤
-│  得分: ${String(strength.score).padStart(3)}/100        │  格局: ${structure.primaryPattern.padEnd(16)}│  得分: ${String(fortune.overall.score).padStart(3)}/100          │
+│  得分: ${String(strength.strengthScore).padStart(3)}/100        │  格局: ${structure.primaryPattern.padEnd(16)}│  得分: ${String(fortune.overall.score).padStart(3)}/100          │
 │  等级: \x1b[${strengthColor}m${strength.level}\x1b[0m              │  喜用: ${structure.isFavorable ? '✓ 得用' : '注意'}          │  等级: ${fortune.overall.level}              │
 │  月令: ${strength.scoring.monthOrder >= 0 ? '+' : ''}${strength.scoring.monthOrder}                  │                          │  ${scoreBar}  │
 │  通根: +${strength.scoring.roots}                  │                          │  强项: ${fortune.overall.bestDimension}                  │
@@ -144,13 +144,13 @@ function renderKeyMetrics(
 // ---- Strength Gauge ----
 
 function renderStrengthGauge(strength: StrengthResult): string {
-  const score = strength.score;
+  const score = strength.strengthScore;
   const barLen = 40;
   const filled = Math.round(score / 100 * barLen);
   const bar = '█'.repeat(filled) + '░'.repeat(barLen - filled);
 
-  const labels = ['从弱', '身弱', '中和', '身旺', '从旺'];
-  const markerIdx = ['从弱', '身弱', '中和', '身旺', '从旺'].indexOf(strength.level);
+  const labels = ['从弱', '偏弱', '中和', '偏旺', '从旺'];
+  const markerIdx = ['从弱', '偏弱', '中和', '偏旺', '从旺'].indexOf(strength.level);
   const markerPos = Math.round(barLen * (markerIdx / (labels.length - 1)));
 
   let markerLine = ' '.repeat(markerPos) + '▲';
@@ -161,7 +161,7 @@ function renderStrengthGauge(strength: StrengthResult): string {
   return strip(`
 ┌─────────────────────────────────────────────────────────────────────┐
 │                      🔋 旺衰仪表 · Strength Gauge                      │
-│  从弱         身弱         中和         身旺         从旺               │
+│  从弱         偏弱         中和         偏旺         从旺               │
 │  ${bar}  │
 │  ${markerLine}                                                    │
 │  得分: ${score}/100  等级: ${strength.level}                                  │

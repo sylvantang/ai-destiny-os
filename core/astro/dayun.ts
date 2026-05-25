@@ -7,7 +7,7 @@ import type {
   HeavenlyStemIndex, EarthlyBranchIndex,
 } from './types.js';
 import {
-  getStem, getBranch, getHiddenStems, getNayin,
+  getStem, getBranch, getHiddenStems, getNayin, getShiShen,
 } from './constants.js';
 import { getJieQi } from './jieqi.js';
 
@@ -30,6 +30,7 @@ export function calcDaYun(
   birth: BirthInfo,
   monthPillar: Pillar,
   yearStem: HeavenlyStemIndex,
+  dayMasterIndex: HeavenlyStemIndex,
 ): DaYunPillar[] {
   const direction = getDayunDirection(yearStem, birth.gender);
   const birthDate = buildBirthDate(birth);
@@ -69,6 +70,7 @@ export function calcDaYun(
       sexagenaryIndex: sexIdx,
       hiddenStems: getHiddenStems(branchIdx),
       nayin: getNayin(sexIdx),
+      shiShen: getShiShen(dayMasterIndex, stemIdx),
     };
 
     const cycleStartAge = startAge + i * 10;

@@ -154,7 +154,7 @@ ${JSON.stringify(report, null, 2)}
 关键信息速览：
 日主：${s.dayMaster.stem}${s.dayMaster.wuxing}（${s.dayMaster.yinYang}性）
 格局：${st.primaryPattern}${st.subPattern ? '（兼' + st.subPattern + '）' : ''}
-旺衰：${s.level}（${s.score}分）——${s.levelLabel}
+旺衰：${s.level}（${s.strengthScore}分）——${s.levelLabel}
 调候：${c.condition}${c.needsAdjustment ? '，需' + c.neededWuxing : ''}
 
 请围绕以下内容展开，用自然段落表达：
@@ -191,7 +191,7 @@ ${JSON.stringify(report, null, 2)}
 关键信息速览：
 日主：${s.dayMaster.stem}${s.dayMaster.wuxing}（${s.dayMaster.yinYang}性）
 格局：${st.primaryPattern}${st.subPattern ? '（兼' + st.subPattern + '）' : ''}
-旺衰：${s.level}（${s.score}分）
+旺衰：${s.level}（${s.strengthScore}分）
 当前运势：${f.overall.score}分，${f.overall.level}期——${f.overall.levelLabel}
 
 请围绕以下内容展开，用自然段落表达：
@@ -226,7 +226,7 @@ ${JSON.stringify(report, null, 2)}
 关键信息速览：
 日主：${s.dayMaster.stem}${s.dayMaster.wuxing}（${s.dayMaster.yinYang}性）
 格局：${st.primaryPattern}
-旺衰：${s.level}（${s.score}分）
+旺衰：${s.level}（${s.strengthScore}分）
 十神关系：${rel.summary}
 
 请围绕以下内容展开，用自然段落表达：

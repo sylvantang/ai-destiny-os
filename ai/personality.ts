@@ -146,11 +146,11 @@ function deriveStressResponse(
 ): string {
   const wx = chart.dayMasterWuxing;
 
-  if (strength.level === '身弱' || strength.level === '从弱') {
+  if (strength.level === '偏弱' || strength.level === '从弱') {
     return `${wx}性日主偏弱，压力下倾向于内省和寻求支持。建议建立稳定的支持系统和规律的生活节奏。`;
   }
 
-  if (strength.level === '身旺' || strength.level === '从旺') {
+  if (strength.level === '偏旺' || strength.level === '从旺') {
     return `${wx}性日主强旺，抗压能力强，但需注意过度自信导致的决策冒进。建议在重大决定前征询他人意见。`;
   }
 
@@ -207,8 +207,8 @@ function deriveGrowthAreas(
     areas.push('注意合作中的利益分配');
   }
 
-  if (strength.level === '身弱') areas.push('建立自信，学会拒绝');
-  if (strength.level === '身旺') areas.push('培养耐心，避免冲动决策');
+  if (strength.level === '偏弱') areas.push('建立自信，学会拒绝');
+  if (strength.level === '偏旺') areas.push('培养耐心，避免冲动决策');
 
   if (areas.length === 0) {
     areas.push('持续自我提升', '拓展社交圈', '培养多元化技能');
@@ -275,10 +275,10 @@ function yangNote(wx: string, isYang: boolean): string {
 
 function strengthNote(level: string, score: number): string {
   switch (level) {
-    case '身弱': return `从五行力量来看，你目前属于身弱（${score}分），这意味着你对外界支持的需求比较大。你像一块优质的海绵，吸收能力强，但需要合适的环境来滋养。在熟悉和受支持的领域里，你能发挥出远超分数的实力。`;
+    case '偏弱': return `从五行力量来看，你目前属于偏弱（${score}分），这意味着你对外界支持的需求比较大。你像一块优质的海绵，吸收能力强，但需要合适的环境来滋养。在熟悉和受支持的领域里，你能发挥出远超分数的实力。`;
     case '从弱': return `你的命局属于从弱格局（${score}分），这是一种特殊的配置——不是真的"弱"，而是顺势而为反而更强。你擅长在复杂环境中借力打力，不硬碰硬，这是你的智慧。`;
     case '中和': return `你的五行力量处于中和状态（${score}分），这是非常好的平衡。不过于刚强也不过于柔弱，意味着你的可塑性很强，大运往哪边走你就能往哪边调整。`;
-    case '身旺': return `从五行力量来看，你属于身旺（${score}分），能量充沛，承压能力强。你像一棵大树，风吹不倒。不过旺盛也需要疏导——找到合适的出口释放能量，比一味硬撑更健康。`;
+    case '偏旺': return `从五行力量来看，你属于偏旺（${score}分），能量充沛，承压能力强。你像一棵大树，风吹不倒。不过旺盛也需要疏导——找到合适的出口释放能量，比一味硬撑更健康。`;
     case '从旺': return `你的命局属于从旺格局（${score}分），气势如虹。这种格局的人通常在某方面有突出天赋，顺势而上就能取得超越常人的成就。关键是找到那条"势"在哪里。`;
     default: return `你的五行力量评分为${score}分，属于${level}。这意味着你需要根据自己的强弱特点来调整生活和工作策略。`;
   }
@@ -353,7 +353,7 @@ export function renderPersonalityProse(
   );
 
   // 2. Strength analysis
-  paragraphs.push(strengthNote(strength.level, strength.score));
+  paragraphs.push(strengthNote(strength.level, strength.strengthScore));
 
   // 3. Pattern analysis
   paragraphs.push(patternNote(structure.primaryPattern, structure.subPattern, structure.patternShiShen));

@@ -11,6 +11,7 @@ import { analyzeRelations } from '../relationEngine.js';
 import { analyzeFortune } from '../fortuneEngine.js';
 import { calcDaYun } from '../../astro/dayun.js';
 import { calcLiuNian } from '../../astro/liunian.js';
+import { buildReportCard, type PromptContext } from '../../../ai/promptBuilder.js';
 import type { BirthInfo } from '../../astro/types.js';
 
 // Test chart: 1993-07-23 09:30 Beijing Male
@@ -29,8 +30,8 @@ describe('Strength Engine (旺衰)', () => {
   it('should calculate strength for 乙木日主 in 未月', () => {
     const result = analyzeStrength(bazi);
 
-    expect(result.score).toBeGreaterThanOrEqual(0);
-    expect(result.score).toBeLessThanOrEqual(100);
+    expect(result.strengthScore).toBeGreaterThanOrEqual(0);
+    expect(result.strengthScore).toBeLessThanOrEqual(100);
     expect(result.level).toBeDefined();
     expect(result.monthOrder.score).toBeDefined();
     expect(result.roots).toBeDefined();
@@ -144,7 +145,7 @@ describe('Fortune Engine (运势)', () => {
     const structure = analyzeStructure(bazi, strength);
     const climate = analyzeClimate(bazi);
     const relations = analyzeRelations(bazi);
-    const dayun = calcDaYun(birth, bazi.month, bazi.year.stemIndex);
+    const dayun = calcDaYun(birth, bazi.month, bazi.year.stemIndex, bazi.day.stemIndex);
     const liunian = calcLiuNian(bazi, 2024, 2026);
 
     const result = analyzeFortune(bazi, strength, structure, climate, relations, dayun, liunian);
@@ -162,7 +163,7 @@ describe('Fortune Engine (运势)', () => {
     const structure = analyzeStructure(bazi, strength);
     const climate = analyzeClimate(bazi);
     const relations = analyzeRelations(bazi);
-    const dayun = calcDaYun(birth, bazi.month, bazi.year.stemIndex);
+    const dayun = calcDaYun(birth, bazi.month, bazi.year.stemIndex, bazi.day.stemIndex);
     const liunian = calcLiuNian(bazi, 2024, 2026);
 
     const result = analyzeFortune(bazi, strength, structure, climate, relations, dayun, liunian);
@@ -177,7 +178,7 @@ describe('Full Pipeline Integration', () => {
   it('should run strength → climate → structure → relations → fortune', () => {
     // Strength
     const str = analyzeStrength(bazi);
-    expect(str.score).toBeGreaterThan(0);
+    expect(str.strengthScore).toBeGreaterThan(0);
 
     // Climate
     const cli = analyzeClimate(bazi);
@@ -192,9 +193,45 @@ describe('Full Pipeline Integration', () => {
     expect(rel.summary).toBeTruthy();
 
     // Fortune
-    const dayun = calcDaYun(birth, bazi.month, bazi.year.stemIndex);
+    const dayun = calcDaYun(birth, bazi.month, bazi.year.stemIndex, bazi.day.stemIndex);
     const liunian = calcLiuNian(bazi, 2024, 2026);
     const fortune = analyzeFortune(bazi, str, struct, cli, rel, dayun, liunian);
     expect(fortune.overall.score).toBeGreaterThan(0);
+  });
+});
+
+// ---- AI Layer Isolation ----
+
+describe('AI Layer Isolation', () => {
+  it('buildReportCard should contain only engine outputs, not raw pillar data', () => {
+    const strength = analyzeStrength(bazi);
+    const structure = analyzeStructure(bazi, strength);
+    const climate = analyzeClimate(bazi);
+    const relations = analyzeRelations(bazi);
+    const dayun = calcDaYun(birth, bazi.month, bazi.year.stemIndex, bazi.day.stemIndex);
+    const liunian = calcLiuNian(bazi, 2024, 2026);
+    const fortune = analyzeFortune(bazi, strength, structure, climate, relations, dayun, liunian);
+
+    const ctx: PromptContext = {
+      chart: { bazi, birthInfo: birth, dayun, currentDayun: null, wuxingCount: { '木': 0, '火': 0, '土': 0, '金': 0, '水': 0 }, dayMaster: bazi.day.stem, dayMasterWuxing: bazi.day.stem.wuxing },
+      strength, structure, climate, relations, fortune,
+    };
+
+    const report = buildReportCard(ctx);
+    const reportStr = JSON.stringify(report);
+
+    // Must NOT contain raw pillar indices
+    expect(reportStr).not.toContain('stemIndex');
+    expect(reportStr).not.toContain('branchIndex');
+    expect(reportStr).not.toContain('sexagenaryIndex');
+    expect(reportStr).not.toContain('hiddenStems');
+    expect(reportStr).not.toContain('nayin');
+
+    // Must contain engine outputs
+    expect(report.strength).toBeDefined();
+    expect(report.structure).toBeDefined();
+    expect(report.climate).toBeDefined();
+    expect(report.relations).toBeDefined();
+    expect(report.fortune).toBeDefined();
   });
 });

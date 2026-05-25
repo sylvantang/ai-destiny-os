@@ -79,3 +79,18 @@ export {
   calcLiuYue,
   calcLiuRi,
 } from './liunian.js';
+
+// Earthly Branch Relations
+export {
+  isClash,
+  getClashPair,
+  CLASH_PAIRS,
+  isCombination,
+  getCombinationPartner,
+  COMBINATION_WUXING,
+  getPunishment,
+  isSelfPunishment,
+  isHarm,
+  getHarm,
+} from './earthlyBranchRelations.js';
+export type { PunishmentType } from './earthlyBranchRelations.js';
