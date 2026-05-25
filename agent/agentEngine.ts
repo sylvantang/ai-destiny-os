@@ -321,7 +321,7 @@ export class DestinyAgent {
       case '感情':
         return buildRelationshipPrompt(ctx, relationship);
       case '运势':
-        return buildYearlyFortunePrompt(ctx);
+        return buildYearlyFortunePrompt(ctx, new Date().getFullYear());
       case '战略':
         return buildStrategyPrompt(ctx, input);
       case '综合':

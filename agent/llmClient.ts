@@ -339,11 +339,15 @@ export function createOpenAIClient(apiKey?: string, model?: string): LLMClient {
  * Reads ANTHROPIC_API_KEY, ANTHROPIC_MODEL from process.env.
  */
 export function createAnthropicClient(apiKey?: string, model?: string): LLMClient {
-  const key = apiKey ?? process.env['ANTHROPIC_API_KEY'] ?? '';
+  const key = apiKey
+    ?? process.env['ANTHROPIC_API_KEY']
+    ?? process.env['ANTHROPIC_AUTH_TOKEN']
+    ?? '';
   return new LLMClient({
     provider: 'anthropic',
     apiKey: key,
     model: model ?? process.env['ANTHROPIC_MODEL'] ?? 'claude-sonnet-4-6',
+    baseURL: process.env['ANTHROPIC_BASE_URL'],
   });
 }
 
@@ -351,7 +355,7 @@ export function createAnthropicClient(apiKey?: string, model?: string): LLMClien
  * Auto-detect which provider to use based on available API keys.
  */
 export function createAutoClient(): LLMClient | null {
-  const anthropicKey = process.env['ANTHROPIC_API_KEY'];
+  const anthropicKey = process.env['ANTHROPIC_API_KEY'] ?? process.env['ANTHROPIC_AUTH_TOKEN'];
   if (anthropicKey) return createAnthropicClient(anthropicKey);
 
   const openaiKey = process.env['OPENAI_API_KEY'];
