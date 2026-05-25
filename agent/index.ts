@@ -12,6 +12,16 @@ export type {
   SessionMeta,
 } from './agentEngine.js';
 
+// LLM Client
+export { LLMClient, createOpenAIClient, createAnthropicClient, createAutoClient } from './llmClient.js';
+export type {
+  LLMProvider,
+  LLMConfig,
+  ChatMessage,
+  LLMResponse,
+  LLMStreamEvent,
+} from './llmClient.js';
+
 // Conversation manager
 export {
   createConversation,

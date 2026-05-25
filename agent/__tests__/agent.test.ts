@@ -4,6 +4,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { DestinyAgent } from '../agentEngine.js';
+import { LLMClient, createOpenAIClient, createAnthropicClient, createAutoClient } from '../llmClient.js';
+import type { LLMConfig } from '../llmClient.js';
 import {
   createConversation,
   processTurn,
@@ -239,5 +241,133 @@ describe('ConversationManager', () => {
     const suggestions = getSuggestionsForDomain('事业');
     expect(suggestions.length).toBeGreaterThan(0);
     expect(suggestions.some(s => s.includes('行业') || s.includes('创业'))).toBe(true);
+  });
+});
+
+// ---- LLM Client Tests ----
+
+describe('LLMClient', () => {
+  it('should create an OpenAI client', () => {
+    const client = createOpenAIClient('test-key', 'gpt-4o');
+    expect(client).toBeInstanceOf(LLMClient);
+  });
+
+  it('should create an Anthropic client', () => {
+    const client = createAnthropicClient('test-key', 'claude-sonnet-4-6');
+    expect(client).toBeInstanceOf(LLMClient);
+  });
+
+  it('should create auto client from env (returns null without keys)', () => {
+    const client = createAutoClient();
+    // No API keys in test env, so should be null
+    expect(client).toBeNull();
+  });
+
+  it('should create client with custom config', () => {
+    const config: LLMConfig = {
+      provider: 'openai',
+      apiKey: 'sk-test',
+      model: 'gpt-4o',
+      maxTokens: 1024,
+      temperature: 0.5,
+      baseURL: 'https://custom.api.com',
+    };
+    const client = new LLMClient(config);
+    expect(client).toBeInstanceOf(LLMClient);
+  });
+
+  it('should throw on actual API call without valid key (validates error handling)', async () => {
+    const client = new LLMClient({
+      provider: 'openai',
+      apiKey: 'invalid-key',
+      model: 'gpt-4o',
+    });
+    await expect(client.chat([{ role: 'user', content: 'test' }])).rejects.toThrow();
+  });
+});
+
+// ---- Agent + LLM Integration Tests ----
+
+describe('DestinyAgent with LLM', () => {
+  it('should initialize without LLM', () => {
+    const agent = new DestinyAgent(birth);
+    expect(agent.hasLLM()).toBe(false);
+  });
+
+  it('should initialize with LLM client', () => {
+    const llm = new LLMClient({ provider: 'openai', apiKey: 'sk-test', model: 'gpt-4o' });
+    const agent = new DestinyAgent(birth, llm);
+    expect(agent.hasLLM()).toBe(true);
+  });
+
+  it('should set LLM after construction', () => {
+    const agent = new DestinyAgent(birth);
+    expect(agent.hasLLM()).toBe(false);
+
+    const llm = new LLMClient({ provider: 'openai', apiKey: 'sk-test', model: 'gpt-4o' });
+    agent.setLLM(llm);
+    expect(agent.hasLLM()).toBe(true);
+  });
+
+  it('should mark sync responses as llmGenerated: false', () => {
+    const agent = new DestinyAgent(birth);
+    const response = agent.processQuery('我的性格');
+    expect(response.llmGenerated).toBe(false);
+    expect(response.prompt).toBeDefined();
+  });
+
+  it('should process async query with fallback when no LLM', async () => {
+    const agent = new DestinyAgent(birth);
+    const response = await agent.processQueryAsync('我的性格是什么');
+
+    expect(response.topic).toBe('性格');
+    expect(response.llmGenerated).toBe(false);
+    expect(response.text).toContain('性格分析');
+  });
+
+  it('should process async query with fallback for all topics', async () => {
+    const agent = new DestinyAgent(birth);
+    const topics = [
+      ['我的性格', '性格'],
+      ['我适合什么工作', '事业'],
+      ['感情运势', '感情'],
+      ['今年运势', '运势'],
+      ['人生建议', '战略'],
+      ['看看八字', '排盘'],
+      ['你好', '综合'],
+    ];
+
+    for (const [query, expectedTopic] of topics) {
+      const response = await agent.processQueryAsync(query);
+      expect(response.topic).toBe(expectedTopic);
+      expect(response.llmGenerated).toBe(false);
+    }
+  });
+
+  it('should catch LLM errors and return fallback', async () => {
+    const llm = new LLMClient({
+      provider: 'openai',
+      apiKey: 'invalid-key',
+      model: 'gpt-4o',
+    });
+    const agent = new DestinyAgent(birth, llm);
+
+    const response = await agent.processQueryAsync('我的性格');
+    expect(response.topic).toBe('性格');
+    expect(response.text).toContain('[LLM调用失败');
+    expect(response.llmGenerated).toBe(false);
+  });
+
+  it('should handle streaming fallback when no LLM', async () => {
+    const agent = new DestinyAgent(birth);
+    const chunks: string[] = [];
+
+    for await (const event of agent.processQueryStream('我的性格')) {
+      if (event.type === 'token' && event.content) {
+        chunks.push(event.content);
+      }
+    }
+
+    expect(chunks.join('')).toContain('性格分析');
   });
 });
