@@ -4,7 +4,6 @@
 // ============================================================
 
 import type { DaYunPillar } from '../core/astro/types.js';
-import { SEXAGENARY_NAMES } from '../core/astro/constants.js';
 import type { FortuneResult, YearlyFortune } from '../core/destiny/fortuneEngine.js';
 
 /**
@@ -22,9 +21,7 @@ export function renderFortuneTimeline(fortune: FortuneResult): string {
     const marker = isCurrent ? '▶' : ' ';
     const bar = yearBar(yf);
     const score = averageScore(yf);
-    const daYunLabel = yf.daiyunPillar
-      ? SEXAGENARY_NAMES[yf.daiyunPillar.pillar.sexagenaryIndex] ?? '—'
-      : '  ';
+    const daYunLabel = yf.daiyunPillar ?? '  ';
 
     const yearStr = `${marker}${yf.year}`.padEnd(7);
     const barPart = `${bar}`.padEnd(22);

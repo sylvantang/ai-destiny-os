@@ -5,7 +5,7 @@
 // Prompt Builder (core)
 export type { PromptContext, AIPrompt } from './promptBuilder.js';
 export {
-  buildDataContext,
+  buildReportCard,
   buildComprehensivePrompt,
   buildPersonalityPrompt,
   buildCareerPrompt,

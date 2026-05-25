@@ -32,16 +32,16 @@ describe('Strength Engine (旺衰)', () => {
     expect(result.score).toBeGreaterThanOrEqual(0);
     expect(result.score).toBeLessThanOrEqual(100);
     expect(result.level).toBeDefined();
-    expect(result.breakdown.monthOrder).toBeDefined();
-    expect(result.breakdown.roots).toBeDefined();
-    expect(result.breakdown.stemSupport).toBeDefined();
-    expect(result.analysis.length).toBeGreaterThan(0);
+    expect(result.monthOrder.score).toBeDefined();
+    expect(result.roots).toBeDefined();
+    expect(result.stemSupport).toBeDefined();
+    expect(result.summary.length).toBeGreaterThan(0);
   });
 
   it('should correctly identify the day master as 乙木', () => {
     const result = analyzeStrength(bazi);
     // 乙木 in 未月 = summer = control (木克土), should be +5 month order
-    expect(result.breakdown.monthOrder).toBe(5);
+    expect(result.monthOrder.score).toBe(5);
   });
 });
 

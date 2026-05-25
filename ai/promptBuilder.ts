@@ -1,12 +1,10 @@
 // ============================================================
 // AI Destiny OS — AI Layer: Prompt Builder
-// Converts structured BaZi results into LLM-ready prompts.
-// This is the bridge between deterministic engines and AI.
+// Builds LLM prompts that translate engine JSON into natural prose.
+// The AI's ONLY job is translation — all analysis is pre-computed.
 // ============================================================
 
 import type { DestinyChart } from '../core/astro/types.js';
-import { formatBaZi } from '../core/astro/bazi.js';
-import { SEXAGENARY_NAMES } from '../core/astro/constants.js';
 import type { StrengthResult } from '../core/destiny/strengthEngine.js';
 import type { StructureResult } from '../core/destiny/structureEngine.js';
 import type { ClimateResult } from '../core/destiny/climateEngine.js';
@@ -27,280 +25,282 @@ export interface PromptContext {
 export interface AIPrompt {
   system: string;
   user: string;
-  /** All structured data for the LLM to reference */
+  /** The structured report card (engine outputs only) */
   data: Record<string, unknown>;
 }
 
 // ---- System Prompt ----
 
-const SYSTEM_PROMPT = `你是一位资深中国传统命理师，精通八字紫微和子平术，有三十年实战经验。你为客人批命时沉稳从容、言之有据，既不故作高深，也不流于肤浅。
+const SYSTEM_PROMPT = `你是一位资深中国传统命理师。你的任务是向客人"翻译"一份已经算好的命理分析报告。
 
-你的客人都是现代普通人，他们带着真实的人生困惑来找你。你像一位智慧的长辈，用平和而有温度的语言，把命盘的道理讲透，让他们听完后心里有数、眼中有光。
+重要：所有命理分析已经由专业引擎计算完成，包括旺衰、格局、调候、十神关系、大运走势。你不需要再做任何分析或判断，你的工作是把这些计算结果用温暖、自然的语言讲给客人听。
 
-分析原则：
-- 先看格局定基调，再看旺衰论强弱，结合调候看环境，最后落到具体建议
-- 十神关系是分析人际和性格的核心框架
-- 大运决定人生阶段的大方向，流年决定当年的具体起落
-- 不夸大吉凶，吉就是吉，凶就是凶，但要讲清楚为什么，以及怎么办
-- 每个判断都要有命理依据，但说给客人听时要用他们能懂的话
+就像你去医院体检，检验科已经出了报告，你是那位坐诊的医生——你看着化验单，用病人能听懂的话告诉ta"你的身体是怎么回事，平时该注意什么"。你不需要重新验血，你需要的是解读和沟通。
 
-输出铁律（极其重要）：
-- 严禁使用任何 Markdown 符号：不要用星号、井号、减号、方括号、反引号等
-- 严禁使用数字编号标题（如 1. 性格分析 这种格式）
-- 严禁使用列表符号（如 - 开头或 * 开头的行）
+你的声音：
+- 温和、笃定、有见地，像一位老友也像一位师长
+- 不说玄学术语，用现代人日常生活能懂的话来解释命理概念
+- 五行元素（木火土金水）是你唯一保留的专业词汇，因为它们是命理的通用语言
+
+输出铁律：
+- 严禁使用任何 Markdown 符号（星号、井号、减号、方括号、反引号等）
+- 严禁使用数字编号标题
+- 严禁使用列表符号开头的行
 - 只用纯文本，段落之间用空行分隔
-- 像跟客人面对面交谈一样写，不是写技术报告
-- 每段文字要自然流动，有起承转合
-- 如果要以五行元素开头做标识，直接用中文括号或冒号，不要用符号
+- 像在跟客人面对面聊天，不是在做报告
+- 每段文字自然流动，有起承转合`;
 
-你的声音：温和、笃定、有见地。像一位老友，也像一位师长。`;
-
-// ---- Context Builder ----
+// ---- Report Card Builder ----
 
 /**
- * Build the structured data block for the LLM prompt.
- * This converts all engine results into a format the AI can reason about.
+ * Build a "report card" containing ONLY pre-computed engine outputs.
+ * The LLM never sees raw chart data — only structured analysis results.
  */
-export function buildDataContext(ctx: PromptContext): Record<string, unknown> {
+export function buildReportCard(ctx: PromptContext): Record<string, unknown> {
   const { chart, strength, structure, climate, relations, fortune } = ctx;
 
   return {
-    chart: {
-      bazi: formatBaZi(chart.bazi),
-      yearPillar: SEXAGENARY_NAMES[chart.bazi.year.sexagenaryIndex],
-      monthPillar: SEXAGENARY_NAMES[chart.bazi.month.sexagenaryIndex],
-      dayPillar: SEXAGENARY_NAMES[chart.bazi.day.sexagenaryIndex],
-      hourPillar: SEXAGENARY_NAMES[chart.bazi.hour.sexagenaryIndex],
-      dayMaster: `${chart.dayMaster.name}(${chart.dayMasterWuxing})`,
-      wuxingDistribution: chart.wuxingCount,
+    // 客人基本信息（仅用于称呼和语境）
+    guest: {
+      birthYear: chart.birthInfo.year,
+      gender: chart.birthInfo.gender,
     },
-    strength: {
-      score: strength.score,
-      level: strength.level,
-      monthOrder: strength.breakdown.monthOrder,
-      roots: strength.breakdown.roots,
-      stemSupport: strength.breakdown.stemSupport,
-      branchSupport: strength.breakdown.branchSupport,
-    },
+
+    // 旺衰引擎 → 日主强弱完整分析
+    strength,
+
+    // 格局引擎 → 命局格局
     structure: {
       primaryPattern: structure.primaryPattern,
       subPattern: structure.subPattern,
       patternShiShen: structure.patternShiShen,
+      isSpecial: structure.isSpecial,
       isFavorable: structure.isFavorable,
+      analysis: structure.analysis,
     },
-    climate: {
-      needsAdjustment: climate.needsAdjustment,
-      priority: climate.priority,
-      neededElement: climate.neededWuxing,
-      condition: climate.condition,
-    },
+
+    // 调候引擎 → 气候调整需求
+    climate,
+
+    // 十神关系引擎 → 命局中的关键关系组合
     relations: {
       dominantTheme: relations.dominantTheme,
       summary: relations.summary,
-      combinations: relations.relations.map(r => ({
+      details: relations.relations.map(r => ({
         name: r.name,
         category: r.category,
         description: r.description,
       })),
     },
+
+    // 运势引擎 → 完整运势分析
     fortune: {
-      overallScore: fortune.overall.score,
-      level: fortune.overall.level,
-      bestDimension: fortune.overall.bestDimension,
-      riskDimension: fortune.overall.riskDimension,
-      currentDayun: chart.currentDayun
-        ? SEXAGENARY_NAMES[chart.currentDayun.pillar.sexagenaryIndex]
-        : null,
-    },
-    birth: {
-      year: chart.birthInfo.year,
-      month: chart.birthInfo.month,
-      day: chart.birthInfo.day,
-      gender: chart.birthInfo.gender,
-      city: chart.birthInfo.city ?? '未知',
+      overall: fortune.overall,
+      keyYears: fortune.keyYears,
+      lifePeriods: fortune.lifePeriods.slice(0, 6),
+      summary: fortune.summary,
     },
   };
 }
 
-// ---- Analysis Prompt Builders ----
+// ---- Prompt Builders ----
 
 /**
- * Build a comprehensive BaZi analysis prompt.
+ * Comprehensive analysis — all dimensions.
  */
 export function buildComprehensivePrompt(ctx: PromptContext): AIPrompt {
-  const data = buildDataContext(ctx);
+  const report = buildReportCard(ctx);
+  const s = ctx.strength;
+  const st = ctx.structure;
 
-  const userPrompt = `下面是这位客人的完整命盘数据，请你为他做一次全面的命理分析。就像他坐在你面前，你泡好一壶茶，翻开他的命盘，一边看一边跟他聊。
+  const userPrompt = `下面是一份已经算好的命理分析报告（JSON格式）。请你把它翻译成一段自然流畅的命理讲解，就像客人坐在你面前，你看着报告跟ta娓娓道来。
 
-命盘数据：
-${JSON.stringify(data, null, 2)}
+命理分析报告：
+${JSON.stringify(report, null, 2)}
 
-请自然覆盖以下内容，不要列清单，像讲故事一样娓娓道来：
+请自然覆盖以下内容，不要列清单，像讲故事一样：
 
-先聊聊他的日主${ctx.chart.dayMaster.name}是什么样的人，五行给他带来了怎样的性情底色。然后说说格局，这个格局的人做事有什么特点，优势在哪里，需要注意什么。
+先聊聊他的日主——${s.dayMaster.stem}${s.dayMaster.wuxing}日主，${s.dayMaster.yinYang}性。这个天干的人天生有什么样的气质。结合五行分布和旺衰（他目前是${s.level}），说说他的性情底色是什么样的。
 
-接着谈谈事业方向，他适合走什么路，什么时候是发展的好时机，创业的话有几分把握。
+然后说说格局——他的格局是${st.primaryPattern}${st.subPattern ? '，兼带' + st.subPattern : ''}。这个格局的人做事有什么特点，优势在哪里，需要注意什么。
 
-再聊聊他的财运模式，钱从哪里来，什么时候来，怎么管比较好。
+接着谈谈十神关系里揭示的人际模式和人生主题。命局中最关键的组合是什么，这些组合如何影响他的事业、财富和感情。
 
-然后说说感情，他的感情模式是什么样的，什么时候桃花最旺，什么样的伴侣比较合拍。
+然后说说事业方向——结合格局和十神，他适合走什么路。什么时候是发展的好时机。如果有创业想法，命盘支持吗。
 
-顺带提一下健康方面需要注意的地方，毕竟身体是革命的本钱。
+再聊聊感情模式——他在感情里是一个什么样的人，什么时候缘分比较旺，什么样的伴侣比较合拍。
 
-最后讲一讲大运的走势，现在走到哪一步了，未来十年重点是啥，有什么关键的年份要把握或者要小心。
+最后讲一讲大运走势——现在走到哪一步了，未来十年重点是啥，有什么关键的年份要把握或者要小心。
 
-记住：纯文本，无符号，段落之间空行分隔。像在跟客人聊天，不是在做PPT汇报。`;
+记住：纯文本，无符号，段落之间空行分隔。你不是在分析命盘（已经分析好了），你是在"翻译"一份专业报告给客人听。`;
 
-  return { system: SYSTEM_PROMPT, user: userPrompt, data };
+  return { system: SYSTEM_PROMPT, user: userPrompt, data: report };
 }
 
 /**
- * Build a personality-focused analysis prompt.
+ * Personality analysis.
  */
 export function buildPersonalityPrompt(ctx: PromptContext): AIPrompt {
-  const data = buildDataContext(ctx);
-  const { chart, strength, structure, climate } = ctx;
+  const report = buildReportCard(ctx);
+  const s = ctx.strength;
+  const st = ctx.structure;
+  const c = ctx.climate;
 
-  const userPrompt = `这位客人想了解自己的性格。请根据命盘为他做一次性格分析。
+  const userPrompt = `下面是一份已经算好的命理分析报告。这位客人想了解自己的性格，请你把相关部分翻译成一段温暖而深刻的人格解读。
 
-日主：${chart.dayMaster.name}（${chart.dayMasterWuxing}）
-格局：${structure.primaryPattern}
-旺衰：${strength.level}（${strength.score}分）
-调候：${climate.condition}（需${climate.neededWuxing ?? '无特别需求'}）
+命理分析报告：
+${JSON.stringify(report, null, 2)}
 
-命盘数据：
-${JSON.stringify(data, null, 2)}
+关键信息速览：
+日主：${s.dayMaster.stem}${s.dayMaster.wuxing}（${s.dayMaster.yinYang}性）
+格局：${st.primaryPattern}${st.subPattern ? '（兼' + st.subPattern + '）' : ''}
+旺衰：${s.level}（${s.score}分）——${s.levelLabel}
+调候：${c.condition}${c.needsAdjustment ? '，需' + c.neededWuxing : ''}
 
 请围绕以下内容展开，用自然段落表达：
 
-他的日主是${chart.dayMaster.name}，这个天干的人天生有什么样的气质。五行在命盘中的分布如何塑造了他的性情——哪些元素偏旺让他呈现出什么特点，哪些元素偏弱又意味着什么。
+从他的日主说起——${s.dayMaster.stem}${s.dayMaster.wuxing}这个天干的人天生是什么样的。结合旺衰分析中揭示的扶抑关系，说说五行如何塑造了他的性情。
 
-他做事的方式是什么样的，思维习惯如何，处理压力和冲突时最容易出现什么反应。他的性格优势在哪些场景下特别突出，在什么情境下反而会成为局限。
+他的思维模式和行为风格——做事的方式是什么样的，遇到压力时怎么反应，在什么情境下最自在，什么情境下容易消耗。
 
-如果对应现代心理学的话，他大概接近哪种 MBTI 类型，为什么。
+性格优势和成长点——他在什么地方特别有天赋，在什么地方容易重复同样的模式。结合十神关系中揭示的人际特点来说。
 
-最后给他一些自我认知和成长方面的建议，不是空话，而是真正能从他的命盘里读出来的方向。
+如果对应现代心理学，他大概接近什么人格类型，为什么。
 
-记住：纯文本，无 Markdown 符号，无编号，段落间空行分隔。语气像一位阅人无数的长辈在跟你聊你自己。`;
+最后给他一些自我认知方面的建议——不是空话，而是从他的命盘结构里能读出来的真实方向。
 
-  return { system: SYSTEM_PROMPT, user: userPrompt, data };
+记住：纯文本，无 Markdown 符号，无编号，段落间空行分隔。你是在解读一份已经完成的性格分析报告，不是在重新分析。`;
+
+  return { system: SYSTEM_PROMPT, user: userPrompt, data: report };
 }
 
 /**
- * Build a career-focused analysis prompt.
+ * Career analysis.
  */
 export function buildCareerPrompt(ctx: PromptContext): AIPrompt {
-  const data = buildDataContext(ctx);
-  const { chart, strength, structure, fortune } = ctx;
+  const report = buildReportCard(ctx);
+  const s = ctx.strength;
+  const st = ctx.structure;
+  const f = ctx.fortune;
 
-  const userPrompt = `这位客人想了解自己的事业方向。请根据命盘为他做一次事业发展分析。
+  const userPrompt = `下面是一份已经算好的命理分析报告。这位客人想了解自己的事业方向，请你把相关部分翻译成一段实用的职业发展解读。
 
-日主：${chart.dayMaster.name}（${chart.dayMasterWuxing}）
-格局：${structure.primaryPattern}${structure.subPattern ? '（副格：' + structure.subPattern + '）' : ''}
-旺衰：${strength.level}（${strength.score}分）
-当前运势：${fortune.overall.score}分，处于${fortune.overall.level}期
+命理分析报告：
+${JSON.stringify(report, null, 2)}
 
-命盘数据：
-${JSON.stringify(data, null, 2)}
+关键信息速览：
+日主：${s.dayMaster.stem}${s.dayMaster.wuxing}（${s.dayMaster.yinYang}性）
+格局：${st.primaryPattern}${st.subPattern ? '（兼' + st.subPattern + '）' : ''}
+旺衰：${s.level}（${s.score}分）
+当前运势：${f.overall.score}分，${f.overall.level}期——${f.overall.levelLabel}
 
 请围绕以下内容展开，用自然段落表达：
 
-先说这个格局和日主组合，天生适合走哪条路。给几个具体的行业或岗位方向，要接地气，让他一听就能联想到自己能不能干。
+先说这个格局和日主组合，天生适合走哪条路。给几个具体的方向，要接地气，让他一听就能联想到自己能不能干。
 
-然后分析他的核心竞争力是什么，在职场上凭什么吃得开。如果考虑创业，他的命盘支持吗，有一说一，有几分把握就说几分。
+然后分析他的核心竞争力是什么——从十神关系和旺衰分析里能看出他在职场上凭什么吃得开。如果考虑创业，命盘中有没有支持，有几分把握。
 
-接着说说事业发展的节奏——什么年龄段是上升期，什么阶段需要沉淀，现在这个节点该进攻还是防守。
+接着说说事业发展的节奏——结合大运走势，什么年龄段是上升期，什么阶段需要沉淀，现在这个节点该进攻还是防守。
 
-再谈谈职场风险，他容易踩什么坑，怎么避。未来三年具体怎么做，给他一个清晰的策略框架。
+再谈谈职场风险——结合十神关系里的不利组合，他容易踩什么坑，怎么避。未来怎么规划比较稳。
 
-记住：纯文本，无 Markdown 符号，无编号，段落间空行分隔。像一个实战经验丰富的前辈在指点后辈，既实际又有洞见。`;
+记住：纯文本，无 Markdown 符号，无编号，段落间空行分隔。你是在呈现一份已经完成的事业分析，不是在重新算。`;
 
-  return { system: SYSTEM_PROMPT, user: userPrompt, data };
+  return { system: SYSTEM_PROMPT, user: userPrompt, data: report };
 }
 
 /**
- * Build a relationship-focused analysis prompt.
+ * Relationship analysis.
  */
 export function buildRelationshipPrompt(ctx: PromptContext): AIPrompt {
-  const data = buildDataContext(ctx);
-  const { chart, strength, structure } = ctx;
+  const report = buildReportCard(ctx);
+  const s = ctx.strength;
+  const st = ctx.structure;
+  const rel = ctx.relations;
 
-  const userPrompt = `这位客人想了解自己的感情运势。请根据命盘为他做一次感情分析。
+  const userPrompt = `下面是一份已经算好的命理分析报告。这位客人想了解自己的感情运势，请你把相关部分翻译成一段温柔而有见地的感情解读。
 
-日主：${chart.dayMaster.name}（${chart.dayMasterWuxing}）
-格局：${structure.primaryPattern}
-旺衰：${strength.level}（${strength.score}分）
+命理分析报告：
+${JSON.stringify(report, null, 2)}
 
-命盘数据：
-${JSON.stringify(data, null, 2)}
+关键信息速览：
+日主：${s.dayMaster.stem}${s.dayMaster.wuxing}（${s.dayMaster.yinYang}性）
+格局：${st.primaryPattern}
+旺衰：${s.level}（${s.score}分）
+十神关系：${rel.summary}
 
 请围绕以下内容展开，用自然段落表达：
 
-先说说他在感情里是一个什么样的人——他的情感模式是什么，他需要什么样的亲密关系，他在感情中容易表现出什么特质。
+先说说他在感情里是一个什么样的人——从他的日主和十神关系来看，他的情感模式是什么，他需要什么样的亲密关系。
 
-然后聊聊桃花运，哪几年缘分最旺，什么时候容易走进婚姻。理想的伴侣大概是什么样的，不用太玄，用现代人能听懂的话描述。
+然后聊聊感情中的优势和盲点——他容易在哪类关系里舒服，又在哪类关系里吃亏。结合十神关系里的提示来说。
 
-接着分析他在感情中的优势和盲点——他容易在哪类关系里舒服，又在哪类关系里吃亏。感情中有什么风险需要提前意识到。
+接着说说理想的伴侣大概是什么样的——用现代人能听懂的话描述，不要玄学术语。
 
-最后给一些感情经营的实在建议，怎么选、怎么处、怎么守。
+最后给一些感情经营的实在建议——怎么选、怎么处、怎么守。
 
-记住：纯文本，无 Markdown 符号，无编号，段落间空行分隔。语气温柔而有分量，像一个阅尽人间事的过来人在用心嘱咐。`;
+记住：纯文本，无 Markdown 符号，无编号，段落间空行分隔。你是在温柔地转述一份感情分析，不是在掐指重算。`;
 
-  return { system: SYSTEM_PROMPT, user: userPrompt, data };
+  return { system: SYSTEM_PROMPT, user: userPrompt, data: report };
 }
 
 /**
- * Build a strategy prompt for life decisions.
+ * Strategy / life decision analysis — the only prompt where the LLM
+ * does some reasoning, but it must ground all conclusions in the report.
  */
 export function buildStrategyPrompt(
   ctx: PromptContext,
   question: string,
 ): AIPrompt {
-  const data = buildDataContext(ctx);
+  const report = buildReportCard(ctx);
 
-  const userPrompt = `这位客人带着一个问题来找你。请结合他的命盘，认真回答他。
+  const userPrompt = `下面是一份已经算好的命理分析报告，以及这位客人当前的问题。请你结合报告中的分析结果，给他一个深思熟虑的回答。
 
-他问的是：${question}
+客人问的是：${question}
 
-命盘完整数据：
-${JSON.stringify(data, null, 2)}
+命理分析报告：
+${JSON.stringify(report, null, 2)}
 
-请这样做分析：
+请这样做：
 
-先理解他到底在问什么、在担心什么。然后回到命盘，从日主五行和格局出发，给他一个有根有据的判断。结合当前大运和流年的走势，告诉他现在这件事处于什么阶段——是该动还是该等，是顺风还是逆风。
+先理解他到底在问什么、在担心什么。然后回到报告——日主旺衰是怎么说的，格局是怎么判的，当前运势处于什么阶段。用报告里的结论来回应他的问题，而不是自己重新分析。
 
-给出明确的方向建议，不要模棱两可。如果看到了风险，直说，但也要告诉他在什么条件下可以化解，在什么时间节点该特别注意。
+结合当前大运和运势评估中的最佳年份/风险年份，告诉他现在这件事处于什么阶段——是该动还是该等，是顺风还是逆风。
+
+给出明确的方向建议，不要模棱两可。如果报告里揭示了风险，直说，但要讲清楚在什么条件下可以化解，在什么时间节点该特别注意。
 
 最后给他一个具体的行动框架，让他回去就知道第一步该做什么。
 
-记住：纯文本，无 Markdown 符号，无编号，段落间空行分隔。像一个被信任的师长，认真听完他的问题后，给他一个深思熟虑的回答。`;
+记住：纯文本，无 Markdown 符号，无编号，段落间空行分隔。你基于报告给出建议，不是凭空论断。`;
 
-  return { system: SYSTEM_PROMPT, user: userPrompt, data };
+  return { system: SYSTEM_PROMPT, user: userPrompt, data: report };
 }
 
 /**
- * Build a yearly fortune prompt.
+ * Yearly fortune analysis for a specific year.
  */
 export function buildYearlyFortunePrompt(
   ctx: PromptContext,
   year: number,
 ): AIPrompt {
-  const data = buildDataContext(ctx);
+  const report = buildReportCard(ctx);
 
-  const userPrompt = `这位客人想了解${year}年的流年运势。请根据命盘为他做一次年度运势分析。
+  const userPrompt = `下面是一份已经算好的命理分析报告。这位客人想了解${year}年的流年运势，请你把运势部分翻译成一段自然的年度运势解读。
 
-命盘数据：
-${JSON.stringify(data, null, 2)}
+命理分析报告：
+${JSON.stringify(report, null, 2)}
 
 请围绕以下内容展开，用自然段落表达：
 
-先给这年定个调——整体是什么运，是好年还是需要小心的年份，有几分好几分难。
+先给这年定个调——从报告中的运势评估来看，整体是什么水平，处于什么阶段。是好年还是需要小心的年份。
 
-然后分别看看事业运，这一年工作上有什么机会，有没有贵人，重点在什么时候发力。财运方面，收入怎么样，适合投资吗，有没有大进大出的月份要留心。感情运上，单身的话桃花什么时候来，有伴的话关系稳定吗，需要注意什么。健康方面，哪几个月要特别注意，身体哪个系统容易出问题。
+然后分别看看各个维度——事业运怎么样，有没有贵人，重点在什么时候发力。财运方面，收入怎么样，适合投资吗。感情运上，缘分如何。健康方面，哪个方向需要留意。
 
-最后给一个年度行动建议，什么时候该冲，什么时候该守，这一年最重要的三件事是什么。
+如果把报告中未来几年的运势放在一起看，今年在整个走势中处于什么位置——是起点、拐点还是平台期。
 
-记住：纯文本，无 Markdown 符号，无编号，段落间空行分隔。像过年时长辈拉着你的手，认认真真给你说这一年的吉凶进退。`;
+最后给一个年度行动建议，这一年最重要的几件事是什么，什么时候该冲，什么时候该守。
 
-  return { system: SYSTEM_PROMPT, user: userPrompt, data };
+记住：纯文本，无 Markdown 符号，无编号，段落间空行分隔。你是在讲述一份已经完成的运势报告，不是在重算流年。`;
+
+  return { system: SYSTEM_PROMPT, user: userPrompt, data: report };
 }

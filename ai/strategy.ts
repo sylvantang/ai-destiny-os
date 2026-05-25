@@ -179,6 +179,11 @@ function analyzeCurrentPhase(
       focus = ['韬光养晦', '学习和积累', '维护核心关系', '健康管理'];
       avoid = ['重大投资决策', '冲动跳槽创业'];
       break;
+    default:
+      description = `${dayunName}运势变化期，需灵活应对。`;
+      focus = ['顺势而为', '保持耐心'];
+      avoid = ['极端决策'];
+      break;
   }
 
   return { name: dayunName, description, focus, avoid };

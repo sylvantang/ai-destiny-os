@@ -134,9 +134,9 @@ function renderKeyMetrics(
 ├──────────────────────────┼──────────────────────────┼──────────────────────────┤
 │  得分: ${String(strength.score).padStart(3)}/100        │  格局: ${structure.primaryPattern.padEnd(16)}│  得分: ${String(fortune.overall.score).padStart(3)}/100          │
 │  等级: \x1b[${strengthColor}m${strength.level}\x1b[0m              │  喜用: ${structure.isFavorable ? '✓ 得用' : '注意'}          │  等级: ${fortune.overall.level}              │
-│  月令: +${strength.breakdown.monthOrder}                  │                          │  ${scoreBar}  │
-│  通根: +${strength.breakdown.roots}                  │                          │  强项: ${fortune.overall.bestDimension}                  │
-│  助力: +${strength.breakdown.stemSupport + strength.breakdown.branchSupport}                  │                          │  风险: ${fortune.overall.riskDimension}                  │
+│  月令: ${strength.scoring.monthOrder >= 0 ? '+' : ''}${strength.scoring.monthOrder}                  │                          │  ${scoreBar}  │
+│  通根: +${strength.scoring.roots}                  │                          │  强项: ${fortune.overall.bestDimension}                  │
+│  助力: +${strength.scoring.stemSupport + strength.scoring.branchSupport}                  │                          │  风险: ${fortune.overall.riskDimension}                  │
 └──────────────────────────┴──────────────────────────┴──────────────────────────┘
 `);
 }
@@ -165,7 +165,7 @@ function renderStrengthGauge(strength: StrengthResult): string {
 │  ${bar}  │
 │  ${markerLine}                                                    │
 │  得分: ${score}/100  等级: ${strength.level}                                  │
-│  ${strength.analysis.join('；')}                                      │
+│  ${strength.summary}                                      │
 └─────────────────────────────────────────────────────────────────────┘
 `);
 }
