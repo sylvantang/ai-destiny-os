@@ -141,17 +141,20 @@ class DestinyREPL {
     console.log(HELP);
 
     this.running = true;
-    this.rl.on('line', async (line) => {
-      await this.handleLine(line);
-      if (this.running) this.rl.prompt();
-    });
-
-    this.rl.on('close', () => {
-      this.running = false;
-      console.log('\n再见。');
-    });
-
     this.rl.prompt();
+
+    try {
+      for await (const line of this.rl) {
+        await this.handleLine(line);
+        if (!this.running) break;
+        try { this.rl.prompt(); } catch { /* closed */ }
+      }
+    } catch {
+      // readline closed — expected on piped input or /exit
+    }
+
+    this.running = false;
+    console.log('\n再见。');
   }
 
   private async handleLine(line: string): Promise<void> {
