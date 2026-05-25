@@ -109,6 +109,39 @@ describe('DestinyAgent', () => {
     expect(agent.state.session.turnCount).toBe(2);
   });
 
+  it('should record correct roles and topics in history', () => {
+    const agent = new DestinyAgent(birth);
+    agent.processQuery('我的性格特点');
+
+    expect(agent.state.history).toHaveLength(2);
+    expect(agent.state.history[0]!.role).toBe('user');
+    expect(agent.state.history[0]!.topic).toBe('性格');
+    expect(agent.state.history[0]!.content).toBe('我的性格特点');
+    expect(agent.state.history[1]!.role).toBe('agent');
+    expect(agent.state.history[1]!.topic).toBe('性格');
+    expect(agent.state.history[1]!.content).toContain('性格分析');
+  });
+
+  it('should track turn count across multiple queries', () => {
+    const agent = new DestinyAgent(birth);
+    agent.processQuery('我的性格');
+    agent.processQuery('我适合什么工作');
+    agent.processQuery('感情运势怎么样');
+
+    expect(agent.state.session.turnCount).toBe(3);
+    expect(agent.state.history).toHaveLength(6); // 3 user + 3 agent
+  });
+
+  it('should detect topic changes across turns', () => {
+    const agent = new DestinyAgent(birth);
+    agent.processQuery('我的性格');
+    agent.processQuery('适合什么工作');
+
+    const userTurns = agent.state.history.filter(t => t.role === 'user');
+    expect(userTurns[0]!.topic).toBe('性格');
+    expect(userTurns[1]!.topic).toBe('事业');
+  });
+
   it('should render dashboard', () => {
     const agent = new DestinyAgent(birth);
     const dashboard = agent.renderDashboard({ compact: true });
@@ -370,5 +403,72 @@ describe('DestinyAgent with LLM', () => {
     }
 
     expect(chunks.join('')).toContain('性格分析');
+  });
+
+  it('should track history in processQueryStream fallback', async () => {
+    const agent = new DestinyAgent(birth);
+
+    for await (const event of agent.processQueryStream('我的性格特点')) {
+      // consume stream
+    }
+
+    expect(agent.state.history).toHaveLength(2);
+    expect(agent.state.history[0]!.role).toBe('user');
+    expect(agent.state.history[0]!.content).toBe('我的性格特点');
+    expect(agent.state.history[1]!.role).toBe('agent');
+    expect(agent.state.history[1]!.content).toContain('性格分析');
+    expect(agent.state.session.turnCount).toBe(1);
+  });
+
+  it('should track history across multiple processQueryStream calls', async () => {
+    const agent = new DestinyAgent(birth);
+
+    for await (const _ of agent.processQueryStream('我的性格')) { /* consume */ }
+    for await (const _ of agent.processQueryStream('适合什么工作')) { /* consume */ }
+
+    expect(agent.state.history).toHaveLength(4);
+    expect(agent.state.session.turnCount).toBe(2);
+    const userTurns = agent.state.history.filter(t => t.role === 'user');
+    expect(userTurns[0]!.topic).toBe('性格');
+    expect(userTurns[1]!.topic).toBe('事业');
+  });
+
+  it('should track history in processQueryAsync fallback', async () => {
+    const agent = new DestinyAgent(birth);
+    await agent.processQueryAsync('我的感情运势');
+
+    expect(agent.state.history).toHaveLength(2);
+    expect(agent.state.history[0]!.role).toBe('user');
+    expect(agent.state.history[0]!.topic).toBe('感情');
+    expect(agent.state.history[1]!.role).toBe('agent');
+    expect(agent.state.session.turnCount).toBe(1);
+  });
+
+  it('should accumulate history across async and sync queries', async () => {
+    const agent = new DestinyAgent(birth);
+    agent.processQuery('看看八字');
+    await agent.processQueryAsync('我的性格');
+
+    expect(agent.state.history).toHaveLength(4);
+    expect(agent.state.session.turnCount).toBe(2);
+
+    const topics = agent.state.history
+      .filter(t => t.role === 'user')
+      .map(t => t.topic);
+    expect(topics).toContain('排盘');
+    expect(topics).toContain('性格');
+  });
+
+  it('should record topic on done event in stream', async () => {
+    const agent = new DestinyAgent(birth);
+    const topics: string[] = [];
+
+    for await (const event of agent.processQueryStream('我的事业运势')) {
+      if (event.type === 'done') {
+        topics.push(event.topic ?? 'unknown');
+      }
+    }
+
+    expect(topics).toContain('事业');
   });
 });
