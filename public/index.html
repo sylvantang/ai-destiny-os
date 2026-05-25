@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Destiny OS · 命理分析</title>
+<style>
+  :root {
+    --wood: #4a9;
+    --fire: #e55;
+    --earth: #c93;
+    --metal: #bbb;
+    --water: #48b;
+    --bg: #0d1117;
+    --card: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #c93;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+  .container { max-width: 960px; margin: 0 auto; padding: 20px; }
+
+  header {
+    text-align: center;
+    padding: 32px 0 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+  header h1 { font-size: 1.6rem; font-weight: 600; letter-spacing: 0.05em; }
+  header p { color: var(--muted); font-size: 0.9rem; margin-top: 4px; }
+
+  .form-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+  }
+  .form-card h2 {
+    font-size: 1rem;
+    margin-bottom: 16px;
+    color: var(--accent);
+  }
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 12px;
+  }
+  .form-grid label {
+    display: flex;
+    flex-direction: column;
+    font-size: 0.8rem;
+    color: var(--muted);
+    gap: 4px;
+  }
+  .form-grid input, .form-grid select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    padding: 8px 10px;
+    font-size: 0.9rem;
+    font-family: inherit;
+  }
+  .form-grid input:focus, .form-grid select:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .btn-row { display: flex; gap: 10px; margin-top: 16px; }
+  .btn {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-primary:hover { filter: brightness(1.1); }
+  .btn-outline {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .btn-outline:hover { border-color: var(--accent); }
+
+  .chart-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+    display: none;
+  }
+  .chart-card.active { display: block; }
+
+  .chart-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .chart-table th, .chart-table td {
+    padding: 8px 6px;
+    text-align: center;
+    border: 1px solid var(--border);
+  }
+  .chart-table th {
+    background: var(--bg);
+    color: var(--muted);
+    font-weight: 500;
+    font-size: 0.8rem;
+  }
+  .stem { font-size: 1.1rem; font-weight: 600; }
+  .hidden { font-size: 0.7rem; color: var(--muted); }
+
+  .chart-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+    margin-top: 16px;
+    font-size: 0.85rem;
+  }
+  .chart-meta .item { display: flex; gap: 8px; align-items: center; }
+  .chart-meta .label { color: var(--muted); }
+  .chart-meta .value { font-weight: 500; }
+
+  .analysis-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+    display: none;
+  }
+  .analysis-card.active { display: block; }
+
+  .query-row { display: flex; gap: 10px; margin-bottom: 16px; }
+  .query-row input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 10px 14px;
+    font-size: 0.9rem;
+    font-family: inherit;
+  }
+  .query-row input:focus { outline: none; border-color: var(--accent); }
+
+  .answer {
+    white-space: pre-wrap;
+    line-height: 1.8;
+    font-size: 0.9rem;
+  }
+  .answer .wx-木 { color: var(--wood); }
+  .answer .wx-火 { color: var(--fire); }
+  .answer .wx-土 { color: var(--earth); }
+  .answer .wx-金 { color: var(--metal); }
+  .answer .wx-水 { color: var(--water); }
+
+  .spinner { color: var(--muted); font-size: 0.85rem; }
+  .topic-badge {
+    display: inline-block;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    color: var(--accent);
+  }
+
+  .wx-bar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+  }
+  .wx-bar .wx-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.8rem;
+  }
+  .wx-bar .wx-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>AI Destiny OS</h1>
+    <p>四柱八字 · 命理分析</p>
+  </header>
+
+  <!-- Birth Form -->
+  <div class="form-card">
+    <h2>出生信息</h2>
+    <div class="form-grid">
+      <label>年 <input id="f-year" type="number" value="1993" min="1900" max="2100"></label>
+      <label>月 <input id="f-month" type="number" value="7" min="1" max="12"></label>
+      <label>日 <input id="f-day" type="number" value="23" min="1" max="31"></label>
+      <label>时 <input id="f-hour" type="number" value="9" min="0" max="23"></label>
+      <label>分 <input id="f-minute" type="number" value="30" min="0" max="59"></label>
+      <label>经度 <input id="f-lng" type="number" value="116.4" step="0.1"></label>
+      <label>性别 <select id="f-gender"><option value="男">男</option><option value="女">女</option></select></label>
+      <label>夏令时 <select id="f-dst"><option value="0">否</option><option value="1">是</option></select></label>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="loadChart()">查看命盘</button>
+    </div>
+  </div>
+
+  <!-- Chart Result -->
+  <div id="chart-card" class="chart-card">
+    <h2 style="font-size:1rem;color:var(--accent);margin-bottom:12px;">四柱八字 · Four Pillars</h2>
+    <div id="chart-content"></div>
+  </div>
+
+  <!-- AI Analysis -->
+  <div id="analysis-card" class="analysis-card">
+    <h2 style="font-size:1rem;color:var(--accent);margin-bottom:12px;">AI 命理分析</h2>
+    <div class="query-row">
+      <input id="query-input" type="text" placeholder="输入问题，如：我的事业发展方向是什么？"
+             onkeydown="if(event.key==='Enter')askQuestion()">
+      <button class="btn btn-primary" onclick="askQuestion()">提问</button>
+    </div>
+    <div id="quick-asks" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;"></div>
+    <div class="answer" id="answer"></div>
+    <div class="spinner" id="spinner"></div>
+  </div>
+</div>
+
+<script>
+const WX_COLORS = { '木': '#4a9', '火': '#e55', '土': '#c93', '金': '#bbb', '水': '#48b' };
+const WX_DOTS = { '木': '#2d8', '火': '#e33', '土': '#b82', '金': '#aaa', '水': '#37a' };
+const PILLARS = ['年柱', '月柱', '日柱', '时柱'];
+
+let currentChart = null;
+
+async function loadChart() {
+  const body = getFormData();
+  const res = await fetch('/api/chart', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (data.error) { alert(data.error); return; }
+
+  currentChart = data.chart;
+  renderChart(data);
+  document.getElementById('chart-card').classList.add('active');
+  document.getElementById('analysis-card').classList.add('active');
+
+  // Quick-ask buttons
+  document.getElementById('quick-asks').innerHTML = [
+    '我的性格特点', '事业发展方向', '感情运势', '今年运势如何', '人生战略建议'
+  ].map(q => `<button class="btn btn-outline" style="padding:6px 12px;font-size:0.8rem;" onclick="quickAsk('${q}')">${q}</button>`).join('');
+}
+
+function renderChart(data) {
+  const ch = data.chart;
+  let html = `<table class="chart-table">
+    <tr><th></th>${PILLARS.map(p => `<th>${p}</th>`).join('')}</tr>
+    <tr>
+      <td>天干</td>
+      ${ch.pillars.map(p => `<td><span class="stem" style="color:${WX_COLORS[p.stem.wuxing]}">${p.stem.name}</span></td>`).join('')}
+    </tr>
+    <tr>
+      <td>地支</td>
+      ${ch.pillars.map(p => `<td><span class="stem" style="color:${WX_COLORS[p.branch.wuxing]}">${p.branch.name}</span></td>`).join('')}
+    </tr>
+    <tr>
+      <td>藏干</td>
+      ${ch.pillars.map(p => `<td class="hidden">${p.hiddenStems.map(h => `<span style="color:${WX_COLORS[h.wuxing]}">${h.name}</span>`).join('')}</td>`).join('')}
+    </tr>
+    <tr>
+      <td>纳音</td>
+      ${ch.pillars.map(p => `<td class="hidden">${p.nayin}</td>`).join('')}
+    </tr>
+    <tr>
+      <td>十神</td>
+      ${ch.pillars.map(p => `<td class="hidden">${p.shiShen}</td>`).join('')}
+    </tr>
+  </table>`;
+
+  html += `<div class="wx-bar">五行：
+    ${Object.entries(ch.wuxingCounts ?? {}).map(([wx, n]) =>
+      `<span class="wx-item"><span class="wx-dot" style="background:${WX_DOTS[wx]}"></span> ${wx} ${n}</span>`
+    ).join('')}
+  </div>`;
+
+  html += `<div class="chart-meta">
+    <div class="item"><span class="label">日主</span><span class="value" style="color:${WX_COLORS[ch.dayMaster.wuxing]}">${ch.dayMaster.name}${ch.dayMaster.wuxing}</span></div>
+    <div class="item"><span class="label">起运</span><span class="value">${ch.startAge}岁 ${ch.direction}</span></div>
+  </div>`;
+
+  if (ch.currentDayun) {
+    html += `<div class="chart-meta" style="margin-top:4px;">
+      <div class="item"><span class="label">当前大运</span><span class="value">${ch.currentDayun.pillar} (${ch.currentDayun.startAge}-${ch.currentDayun.endAge}岁)</span></div>
+    </div>`;
+  }
+
+  if (data.analysis) {
+    const a = data.analysis;
+    html += `<div class="chart-meta" style="margin-top:12px;">
+      <div class="item"><span class="label">格局</span><span class="value">${a.structure.primary}</span></div>
+      <div class="item"><span class="label">旺衰</span><span class="value">${a.strength.level} (${a.strength.score}分)</span></div>
+      <div class="item"><span class="label">调候</span><span class="value">${a.climate.needsAdjustment ? '需' + (a.climate.neededWuxing ?? '') : '中和'}</span></div>
+      <div class="item"><span class="label">运势</span><span class="value">${a.fortune.overall.level}期 ${a.fortune.overall.score}分</span></div>
+    </div>`;
+  }
+
+  document.getElementById('chart-content').innerHTML = html;
+}
+
+async function askQuestion() {
+  const input = document.getElementById('query-input');
+  const q = input.value.trim();
+  if (!q) return;
+  input.value = '';
+
+  const answerEl = document.getElementById('answer');
+  const spinnerEl = document.getElementById('spinner');
+  answerEl.textContent = '';
+  spinnerEl.textContent = '分析中...';
+
+  const body = { ...getFormData(), question: q };
+  const res = await fetch('/api/ask', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data: ')) continue;
+      const data = JSON.parse(trimmed.slice(6));
+
+      if (data.type === 'chart') {
+        currentChart = data;
+      } else if (data.type === 'token') {
+        spinnerEl.textContent = '';
+        answerEl.textContent += data.content;
+      } else if (data.type === 'done') {
+        spinnerEl.textContent = data.topic ? `[${data.topic}]` : '';
+      } else if (data.type === 'error') {
+        answerEl.textContent += `\n\n[错误: ${data.error}]`;
+        spinnerEl.textContent = '';
+      }
+    }
+  }
+}
+
+function quickAsk(q) {
+  document.getElementById('query-input').value = q;
+  askQuestion();
+}
+
+function getFormData() {
+  return {
+    year: +document.getElementById('f-year').value,
+    month: +document.getElementById('f-month').value,
+    day: +document.getElementById('f-day').value,
+    hour: +document.getElementById('f-hour').value,
+    minute: +document.getElementById('f-minute').value,
+    longitude: +document.getElementById('f-lng').value,
+    gender: document.getElementById('f-gender').value,
+    isDST: document.getElementById('f-dst').value,
+  };
+}
+</script>
+</body>
+</html>
