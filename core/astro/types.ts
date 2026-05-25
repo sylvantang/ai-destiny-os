@@ -57,6 +57,7 @@ export interface Pillar {
   sexagenaryIndex: SexagenaryIndex;  // 60甲子序号
   hiddenStems: HeavenlyStemIndex[];  // 藏干
   nayin: string;                     // 纳音五行
+  shiShen?: ShiShen;                 // 十神 (relative to day master, set by calcBaZi)
 }
 
 /** 完整八字 (四柱) */

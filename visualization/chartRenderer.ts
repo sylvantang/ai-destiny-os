@@ -4,7 +4,7 @@
 // ============================================================
 
 import type { DestinyChart, BaZi, Wuxing } from '../core/astro/types.js';
-import { HIDDEN_STEMS, SEXAGENARY_NAMES, getShiShen } from '../core/astro/constants.js';
+import { HIDDEN_STEMS, SEXAGENARY_NAMES } from '../core/astro/constants.js';
 
 // ANSI color codes for Wuxing
 const WX_COLORS: Record<Wuxing, (s: string) => string> = {
@@ -123,14 +123,12 @@ function formatNayinRow(bazi: BaZi): string {
 }
 
 function formatShiShenRow(bazi: BaZi): string {
-  const dmIdx = bazi.day.stemIndex;
   const pillars = [bazi.year, bazi.month, bazi.day, bazi.hour];
   return pillars.map((p, i) => {
-    if (i === 2) { // Day pillar → 日主 itself
+    if (i === 2) {
       return `  十神 ${'日主'.padEnd(12)}`;
     }
-    const shiShen = getShiShen(dmIdx, p.stemIndex);
-    const label = `十神 ${(shiShen ?? '—').padEnd(12)}`;
+    const label = `十神 ${(p.shiShen ?? '—').padEnd(12)}`;
     return `  ${label}`;
   }).join('│');
 }

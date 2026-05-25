@@ -216,6 +216,7 @@
     </div>
     <div class="btn-row">
       <button class="btn btn-primary" onclick="loadChart()">查看命盘</button>
+      <button class="btn btn-outline" onclick="exportReport()">导出报告</button>
     </div>
   </div>
 
@@ -374,6 +375,13 @@ async function askQuestion() {
 function quickAsk(q) {
   document.getElementById('query-input').value = q;
   askQuestion();
+}
+
+function exportReport() {
+  const body = getFormData();
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(body)) params.set(k, String(v));
+  window.open('/api/report?' + params.toString(), '_blank');
 }
 
 function getFormData() {

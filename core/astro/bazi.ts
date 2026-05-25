@@ -10,7 +10,7 @@ import type {
 } from './types.js';
 import {
   getStem, getBranch, getHiddenStems, getNayin,
-  getMonthStemStart, getHourStemStart,
+  getMonthStemStart, getHourStemStart, getShiShen,
   sexagenaryIndex, stemFromSexagenary, branchFromSexagenary,
   SEXAGENARY_NAMES, ALL_STEMS,
   JIE_TO_MONTH_BRANCH,
@@ -225,6 +225,13 @@ export function calcBaZi(birth: BirthInfo): BaZi {
     birth.isDST,
     dayPillar.stemIndex,
   );
+
+  // Compute shiShen (十神) for each pillar relative to the day master
+  const dmIdx = dayPillar.stemIndex;
+  yearPillar.shiShen = getShiShen(dmIdx, yearPillar.stemIndex);
+  monthPillar.shiShen = getShiShen(dmIdx, monthPillar.stemIndex);
+  dayPillar.shiShen = getShiShen(dmIdx, dayPillar.stemIndex);
+  hourPillar.shiShen = getShiShen(dmIdx, hourPillar.stemIndex);
 
   return {
     year: yearPillar,
