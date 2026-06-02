@@ -9,6 +9,7 @@ import { analyzeStructure } from '../structureEngine.js';
 import { analyzeClimate } from '../climateEngine.js';
 import { analyzeRelations } from '../relationEngine.js';
 import { analyzeFortune } from '../fortuneEngine.js';
+import { deriveYongShen } from '../yongShenEngine.js';
 import { calcDaYun } from '../../astro/dayun.js';
 import { calcLiuNian } from '../../astro/liunian.js';
 import { buildReportCard, type PromptContext } from '../../../ai/promptBuilder.js';
@@ -582,6 +583,134 @@ describe('运岁关系 (DaYun-LiuNian Interaction)', () => {
       expect(yf.overall).toBeGreaterThanOrEqual(0);
       expect(yf.overall).toBeLessThanOrEqual(100);
     }
+  });
+});
+
+// ---- 用神/喜神/忌神 (Yong Shen System) Tests ----
+
+describe('用神体系 (Yong Shen System)', () => {
+  it('should derive 用神 for the test chart (乙木偏弱)', () => {
+    const strength = analyzeStrength(bazi);
+    const structure = analyzeStructure(bazi, strength);
+    const climate = analyzeClimate(bazi);
+
+    const result = deriveYongShen(bazi, strength, structure, climate);
+
+    // 乙木偏弱 → 用神应为水（印星生扶）
+    expect(result.yongShen).toBeDefined();
+    expect(result.yongShen.wuxing).toBe('水');
+    expect(result.yongShen.shiShen).toBeDefined();
+    expect(result.yongShen.priority).toBeDefined();
+    expect(result.yongShen.reason.length).toBeGreaterThan(0);
+  });
+
+  it('should derive 喜神 that generates 用神', () => {
+    const strength = analyzeStrength(bazi);
+    const structure = analyzeStructure(bazi, strength);
+    const climate = analyzeClimate(bazi);
+
+    const result = deriveYongShen(bazi, strength, structure, climate);
+
+    // 用神=水 → 喜神=金(生水) + 木(被水生=日主)
+    expect(result.xiShen.length).toBeGreaterThanOrEqual(1);
+    const xiWuxings = result.xiShen.map(x => x.wuxing);
+    expect(xiWuxings).toContain('金'); // 金生水
+  });
+
+  it('should derive 忌神 that harms 用神', () => {
+    const strength = analyzeStrength(bazi);
+    const structure = analyzeStructure(bazi, strength);
+    const climate = analyzeClimate(bazi);
+
+    const result = deriveYongShen(bazi, strength, structure, climate);
+
+    // 用神=水 → 忌神=土(克水) + 火(耗水)
+    expect(result.jiShen.length).toBeGreaterThanOrEqual(1);
+    const jiWuxings = result.jiShen.map(j => j.wuxing);
+    expect(jiWuxings).toContain('土'); // 土克水
+  });
+
+  it('should derive 仇神 that controls 用神', () => {
+    const strength = analyzeStrength(bazi);
+    const structure = analyzeStructure(bazi, strength);
+    const climate = analyzeClimate(bazi);
+
+    const result = deriveYongShen(bazi, strength, structure, climate);
+
+    // 仇神 = 土 (controls 水)
+    expect(result.chouShen).toBeDefined();
+    expect(result.chouShen!.wuxing).toBe('土');
+  });
+
+  it('should include all 5 wuxing across 用/喜/忌/闲', () => {
+    const strength = analyzeStrength(bazi);
+    const structure = analyzeStructure(bazi, strength);
+    const climate = analyzeClimate(bazi);
+
+    const result = deriveYongShen(bazi, strength, structure, climate);
+
+    const allAssigned = new Set([
+      result.yongShen.wuxing,
+      ...result.xiShen.map(x => x.wuxing),
+      ...result.jiShen.map(j => j.wuxing),
+      ...result.xianShen,
+    ]);
+    expect(allAssigned.size).toBe(5);
+    expect(allAssigned.has('木')).toBe(true);
+    expect(allAssigned.has('火')).toBe(true);
+    expect(allAssigned.has('土')).toBe(true);
+    expect(allAssigned.has('金')).toBe(true);
+    expect(allAssigned.has('水')).toBe(true);
+  });
+
+  it('should produce a meaningful summary', () => {
+    const strength = analyzeStrength(bazi);
+    const structure = analyzeStructure(bazi, strength);
+    const climate = analyzeClimate(bazi);
+
+    const result = deriveYongShen(bazi, strength, structure, climate);
+
+    expect(result.summary.length).toBeGreaterThan(50);
+    expect(result.summary).toContain('用神');
+    expect(result.summary).toContain('喜神');
+    expect(result.summary).toContain('忌神');
+  });
+
+  it('should handle 从弱 chart', () => {
+    // Deliberately create a chart that's likely 从弱
+    const birth: BirthInfo = {
+      year: 2000, month: 6, day: 15, hour: 12, minute: 0,
+      longitude: 116.4, isDST: false, gender: '男',
+    };
+    const testBz = calcBaZi(birth);
+    const strength = analyzeStrength(testBz);
+    const structure = analyzeStructure(testBz, strength);
+    const climate = analyzeClimate(testBz);
+
+    const result = deriveYongShen(testBz, strength, structure, climate);
+
+    expect(result.yongShen).toBeDefined();
+    expect(result.yongShen.wuxing).toBeDefined();
+    expect(result.analysis.length).toBeGreaterThan(0);
+  });
+
+  it('should produce structured JSON output', () => {
+    const strength = analyzeStrength(bazi);
+    const structure = analyzeStructure(bazi, strength);
+    const climate = analyzeClimate(bazi);
+
+    const result = deriveYongShen(bazi, strength, structure, climate);
+
+    // Verify all required fields
+    const json = JSON.parse(JSON.stringify(result));
+    expect(json.yongShen.wuxing).toBeDefined();
+    expect(json.yongShen.shiShen).toBeDefined();
+    expect(json.yongShen.priority).toBeDefined();
+    expect(Array.isArray(json.xiShen)).toBe(true);
+    expect(Array.isArray(json.jiShen)).toBe(true);
+    expect(Array.isArray(json.xianShen)).toBe(true);
+    expect(Array.isArray(json.analysis)).toBe(true);
+    expect(typeof json.summary).toBe('string');
   });
 });
 

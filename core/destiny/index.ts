@@ -30,3 +30,9 @@ export type {
   LifePeriod,
 } from './fortuneEngine.js';
 export { analyzeFortune } from './fortuneEngine.js';
+export type {
+  YongShenResult,
+  YongShenDetail,
+  WuxingDetail,
+} from './yongShenEngine.js';
+export { deriveYongShen } from './yongShenEngine.js';
