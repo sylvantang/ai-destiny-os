@@ -11,7 +11,7 @@ import { DestinyAgent } from './agent/agentEngine.js';
 import { createAutoClient } from './agent/llmClient.js';
 import { ALL_STEMS, SEXAGENARY_NAMES } from './core/astro/constants.js';
 import type { BirthInfo } from './core/astro/types.js';
-import { saveRecord, listRecords, getRecord, deleteRecord, saveAnalysis, getHistory, createSession, getSession, listSessions, deleteSession, addSessionTurn, getSessionTurns } from './data/database.js';
+import { saveRecord, listRecords, getRecord, deleteRecord, saveAnalysis, getHistory, createSession, getSession, listSessions, deleteSession, addSessionTurn, getSessionTurns, saveFeedback } from './data/database.js';
 import { buildChartPayload } from './ai/chartPayload.js';
 import { buildReportHTML } from './ai/reportHTML.js';
 
@@ -229,8 +229,19 @@ async function handleAsk(req: IncomingMessage, res: ServerResponse): Promise<voi
     addSessionTurn(sessionId, 'user', question).catch(() => {});
   }
 
+  // 30-second timeout for LLM streaming
+  const LLM_TIMEOUT_MS = 30000;
+  let timedOut = false;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+  }, LLM_TIMEOUT_MS);
+
   try {
     for await (const event of agent.processQueryStream(question)) {
+      if (timedOut) {
+        // Timeout reached — break loop and use fallback
+        break;
+      }
       if (event.type === 'token' && event.content) {
         fullText += event.content;
         res.write(`data: ${JSON.stringify({ type: 'token', content: event.content })}\n\n`);
@@ -243,8 +254,29 @@ async function handleAsk(req: IncomingMessage, res: ServerResponse): Promise<voi
     }
   } catch (err) {
     res.write(`data: ${JSON.stringify({ type: 'error', error: err instanceof Error ? err.message : 'Unknown' })}\n\n`);
+  } finally {
+    clearTimeout(timeoutId);
   }
 
+  // If LLM failed or timed out with no response, provide deterministic fallback
+  if (!fullText.trim()) {
+    const fallback = agent.processQuery(question);
+    fullText = fallback.text;
+    finalTopic = finalTopic || fallback.topic;
+    res.write(`data: ${JSON.stringify({ type: 'status', status: 'fallback' })}\n\n`);
+    // Stream fallback text as simulated tokens for UX consistency
+    const chunks = fallback.text.match(/.{1,6}/g) ?? [fallback.text];
+    for (const chunk of chunks) {
+      res.write(`data: ${JSON.stringify({ type: 'token', content: chunk })}\n\n`);
+    }
+  }
+
+  res.write(`data: ${JSON.stringify({
+    type: 'done',
+    topic: finalTopic || undefined,
+    sessionId: sessionId ?? undefined,
+    fallback: !fullText.trim() || timedOut ? true : undefined,
+  })}\n\n`);
   res.end();
 
   // Persist agent turn if sessionId provided (fire-and-forget)
@@ -407,6 +439,29 @@ async function handleDeleteSession(_req: IncomingMessage, res: ServerResponse, s
   }
 }
 
+// ---- Feedback ----
+
+async function handleFeedback(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const raw = await parseBody(req);
+  let body: Record<string, unknown>;
+  try { body = JSON.parse(raw); } catch { return json(res, { error: 'Invalid JSON' }, 400); }
+
+  const sessionId = body['sessionId'] as string;
+  const rating = body['rating'] as string;
+  const turnId = body['turnId'] ? Number(body['turnId']) : undefined;
+
+  if (!sessionId || !['up', 'down'].includes(rating)) {
+    return json(res, { error: 'Invalid request' }, 400);
+  }
+
+  try {
+    const fb = await saveFeedback(sessionId, rating as 'up' | 'down', turnId);
+    json(res, { ok: true, id: fb.id }, 201);
+  } catch {
+    json(res, { error: 'Failed to save feedback' }, 500);
+  }
+}
+
 // ---- Router ----
 
 async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -425,6 +480,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
   }
 
   if (method === 'POST' && url === '/api/chart') return handleChart(req, res);
+  if (method === 'POST' && url === '/api/feedback') return handleFeedback(req, res);
   if (method === 'POST' && url === '/api/ask') return handleAsk(req, res);
   if (method === 'POST' && url === '/api/sessions') return handleCreateSession(req, res);
   if (method === 'GET' && url === '/api/sessions') return handleListSessions(req, res);

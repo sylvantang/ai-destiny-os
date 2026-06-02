@@ -310,7 +310,7 @@ describe('LLMClient', () => {
     expect(client).toBeInstanceOf(LLMClient);
   });
 
-  it('should throw on actual API call without valid key (validates error handling)', async () => {
+  it('should throw on actual API call without valid key (validates error handling)', { timeout: 15000 }, async () => {
     const client = new LLMClient({
       provider: 'openai',
       apiKey: 'invalid-key',
@@ -378,7 +378,7 @@ describe('DestinyAgent with LLM', () => {
     }
   });
 
-  it('should catch LLM errors and return fallback', async () => {
+  it('should catch LLM errors and return fallback', { timeout: 15000 }, async () => {
     const llm = new LLMClient({
       provider: 'openai',
       apiKey: 'invalid-key',

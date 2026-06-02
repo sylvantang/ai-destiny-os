@@ -1,12 +1,11 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { BirthForm, birthToPayload, defaultBirth, type BirthInfo } from '../_components/BirthForm';
-import { Send, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import { Send, ChevronDown, ChevronUp, Sparkles, ThumbsUp, ThumbsDown, RefreshCw, AlertTriangle } from 'lucide-react';
 
 // ---- Types ----
 
@@ -15,6 +14,10 @@ interface Message {
   text: string;
   topic?: string;
   isStreaming?: boolean;
+  isFallback?: boolean;
+  hasError?: boolean;
+  turnId?: number;
+  rating?: 'up' | 'down';
 }
 
 interface ChartContext {
@@ -22,6 +25,8 @@ interface ChartContext {
   pattern: string;
   strength: string;
   fortune: string;
+  yongShen?: string;
+  xiShen?: string[];
 }
 
 const WUXING_COLORS: Record<string, string> = {
@@ -38,6 +43,35 @@ function cn(...classes: (string | boolean | undefined | null)[]) {
   return classes.filter(Boolean).join(' ');
 }
 
+// ---- Context-aware suggestions ----
+
+function generateSuggestions(chartCtx: ChartContext | null): string[] {
+  const base = [
+    '我的性格特点是什么？',
+    '今年运势如何？',
+    '我适合什么行业？',
+    '帮我排盘看看运势',
+  ];
+
+  if (!chartCtx) return base;
+
+  const ctx = [
+    `我是${chartCtx.dayMaster.wuxing}命，我的用神是什么？`,
+    `${chartCtx.pattern}格局有什么特点？`,
+    '未来三年我应该注意什么？',
+    '我的贵人运如何？',
+  ];
+
+  if (chartCtx.yongShen) {
+    ctx.push(`我的用神是${chartCtx.yongShen}，我适合去什么方向发展？`);
+  }
+  if (chartCtx.xiShen && chartCtx.xiShen.length > 0) {
+    ctx.push(`我的喜神是${chartCtx.xiShen.join('、')}，日常应该注意什么？`);
+  }
+
+  return ctx.slice(0, 4);
+}
+
 // ---- Component ----
 
 export default function ChatPage() {
@@ -48,9 +82,11 @@ export default function ChatPage() {
   const [status, setStatus] = useState<'idle' | 'thinking' | 'streaming'>('idle');
   const [chartCtx, setChartCtx] = useState<ChartContext | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [retryMsg, setRetryMsg] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const turnCounter = useRef(0);
 
   // Create session on first load
   useEffect(() => {
@@ -78,15 +114,50 @@ export default function ChatPage() {
     }
   }, [messages]);
 
-  const send = useCallback(async () => {
-    const text = input.trim();
+  // Submit feedback
+  const submitFeedback = useCallback(async (msgIndex: number, rating: 'up' | 'down') => {
+    setMessages((prev) => {
+      const updated = [...prev];
+      if (updated[msgIndex]) {
+        updated[msgIndex] = { ...updated[msgIndex], rating };
+      }
+      return updated;
+    });
+
+    // Persist feedback to database (fire-and-forget)
+    if (sessionId) {
+      try {
+        await fetch('/api/feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId,
+            rating,
+            turnId: messages[msgIndex]?.turnId,
+          }),
+        });
+      } catch { /* best-effort */ }
+    }
+  }, [sessionId, messages]);
+
+  const send = useCallback(async (overrideText?: string) => {
+    const text = (overrideText ?? input).trim();
     if (!text || status !== 'idle') return;
     setInput('');
+    setRetryMsg(null);
+    turnCounter.current += 1;
+    const currentTurn = turnCounter.current;
+
     setMessages((prev) => [...prev, { role: 'user', text }]);
     setStatus('thinking');
 
     // Add placeholder for streaming agent response
-    setMessages((prev) => [...prev, { role: 'agent', text: '', isStreaming: true }]);
+    setMessages((prev) => [...prev, {
+      role: 'agent',
+      text: '',
+      isStreaming: true,
+      turnId: currentTurn,
+    }]);
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -113,6 +184,7 @@ export default function ChatPage() {
 
       const decoder = new TextDecoder();
       let buffer = '';
+      let hadError = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -135,6 +207,16 @@ export default function ChatPage() {
             } else if (event.type === 'status') {
               if (event.status === 'thinking') {
                 setStatus('thinking');
+              } else if (event.status === 'fallback') {
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  const last = updated[updated.length - 1];
+                  if (last && last.role === 'agent' && last.isStreaming) {
+                    last.isFallback = true;
+                    last.text = '';
+                  }
+                  return updated;
+                });
               }
             } else if (event.type === 'token') {
               setStatus('streaming');
@@ -154,17 +236,17 @@ export default function ChatPage() {
                 if (last && last.role === 'agent' && last.isStreaming) {
                   last.isStreaming = false;
                   last.topic = event.topic;
+                  if (event.fallback) last.isFallback = true;
                 }
                 return updated;
               });
             } else if (event.type === 'error') {
-              setStatus('idle');
+              hadError = true;
               setMessages((prev) => {
                 const updated = [...prev];
                 const last = updated[updated.length - 1];
                 if (last && last.role === 'agent' && last.isStreaming) {
-                  last.text = `[错误] ${event.error}`;
-                  last.isStreaming = false;
+                  last.hasError = true;
                 }
                 return updated;
               });
@@ -174,6 +256,21 @@ export default function ChatPage() {
           }
         }
       }
+
+      // If stream ended with error and no text, show retry
+      if (hadError) {
+        setMessages((prev) => {
+          const updated = [...prev];
+          const last = updated[updated.length - 1];
+          if (last && last.role === 'agent' && !last.text.trim()) {
+            last.text = '连接出现问题，请重试';
+            last.isStreaming = false;
+            last.hasError = true;
+          }
+          return updated;
+        });
+        setRetryMsg(text);
+      }
     } catch (err: any) {
       if (err.name === 'AbortError') return;
       setStatus('idle');
@@ -181,11 +278,13 @@ export default function ChatPage() {
         const updated = [...prev];
         const last = updated[updated.length - 1];
         if (last && last.role === 'agent' && last.isStreaming) {
-          last.text = `[错误] ${err.message}`;
+          last.text = `连接失败: ${err.message}`;
           last.isStreaming = false;
+          last.hasError = true;
         }
         return updated;
       });
+      setRetryMsg(text);
     }
   }, [input, status, birth, sessionId]);
 
@@ -209,6 +308,8 @@ export default function ChatPage() {
       return updated;
     });
   };
+
+  const suggestions = generateSuggestions(chartCtx);
 
   return (
     <div className="flex flex-col h-[calc(100vh-5rem)]">
@@ -257,7 +358,7 @@ export default function ChatPage() {
               输入你的问题，AI 命理师为你解读八字、运势、事业、感情等人生课题
             </p>
             <div className="flex flex-wrap gap-2 mt-6 justify-center">
-              {['我的性格特点是什么？', '今年运势如何？', '我适合什么行业？', '帮我排盘看看'].map((q) => (
+              {suggestions.map((q) => (
                 <button
                   key={q}
                   onClick={() => {
@@ -274,38 +375,94 @@ export default function ChatPage() {
         )}
 
         {messages.map((m, i) => (
-          <div
-            key={i}
-            className={cn('flex', m.role === 'user' ? 'justify-end' : 'justify-start')}
-          >
+          <div key={i}>
             <div
-              className={cn(
-                'max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed',
-                m.role === 'user'
-                  ? 'bg-destiny-600 text-white rounded-br-md'
-                  : 'bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-bl-md',
-              )}
+              className={cn('flex', m.role === 'user' ? 'justify-end' : 'justify-start')}
             >
-              {/* Tool-loading indicator */}
-              {m.role === 'agent' && m.isStreaming && m.text === '' && status === 'thinking' && (
-                <div className="flex items-center gap-2 text-muted-foreground animate-pulse-glow">
-                  <span className="text-base">🔮</span>
-                  <span>正在为您排盘推演...</span>
-                </div>
-              )}
-
-              {/* Message text */}
-              <div className="whitespace-pre-wrap break-words">
-                {m.text}
-                {m.role === 'agent' && m.isStreaming && m.text !== '' && (
-                  <span className="inline-block w-1.5 h-4 ml-0.5 bg-destiny-400 animate-pulse align-text-bottom" />
+              <div
+                className={cn(
+                  'max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed',
+                  m.role === 'user'
+                    ? 'bg-destiny-600 text-white rounded-br-md'
+                    : 'bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-bl-md',
                 )}
+              >
+                {/* Tool-loading indicator */}
+                {m.role === 'agent' && m.isStreaming && m.text === '' && status === 'thinking' && (
+                  <div className="flex items-center gap-2 text-muted-foreground animate-pulse-glow">
+                    <span className="text-base">🔮</span>
+                    <span>正在为您排盘推演...</span>
+                  </div>
+                )}
+
+                {/* Fallback notice */}
+                {m.role === 'agent' && m.isFallback && !m.isStreaming && (
+                  <div className="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-lg bg-amber-950/30 border border-amber-800/40 text-amber-400 text-xs">
+                    <AlertTriangle className="h-3 w-3" />
+                    <span>AI 顾问正在冥想，以下为基础引擎生成的报告</span>
+                  </div>
+                )}
+
+                {/* Error notice with retry */}
+                {m.role === 'agent' && m.hasError && !m.isStreaming && (
+                  <div className="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-lg bg-red-950/30 border border-red-800/40 text-red-400 text-xs">
+                    <AlertTriangle className="h-3 w-3" />
+                    <span>连接出现问题</span>
+                    {retryMsg && (
+                      <button
+                        onClick={() => send(retryMsg)}
+                        className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded bg-red-800/40 hover:bg-red-800/60 transition-colors"
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        重试
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Message text */}
+                <div className="whitespace-pre-wrap break-words">
+                  {m.text}
+                  {m.role === 'agent' && m.isStreaming && m.text !== '' && (
+                    <span className="inline-block w-1.5 h-4 ml-0.5 bg-destiny-400 animate-pulse align-text-bottom" />
+                  )}
+                </div>
               </div>
             </div>
+
+            {/* Feedback buttons — only on completed agent messages */}
+            {m.role === 'agent' && !m.isStreaming && m.text && (
+              <div className="flex items-center gap-2 mt-1 ml-1">
+                <button
+                  onClick={() => submitFeedback(i, 'up')}
+                  className={cn(
+                    'p-1 rounded transition-colors',
+                    m.rating === 'up'
+                      ? 'text-green-400 bg-green-950/40'
+                      : 'text-muted-foreground hover:text-green-400 hover:bg-green-950/20',
+                  )}
+                  title="有帮助"
+                >
+                  <ThumbsUp className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => submitFeedback(i, 'down')}
+                  className={cn(
+                    'p-1 rounded transition-colors',
+                    m.rating === 'down'
+                      ? 'text-red-400 bg-red-950/40'
+                      : 'text-muted-foreground hover:text-red-400 hover:bg-red-950/20',
+                  )}
+                  title="不准确"
+                >
+                  <ThumbsDown className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
           </div>
         ))}
 
-        {/* Inline thinking indicator — shown when first thinking then disappears on first token */}
+        {/* Inline thinking indicator */}
         {status === 'thinking' && messages.length === 0 && (
           <div className="flex justify-start">
             <div className="flex items-center gap-2 px-4 py-3 rounded-2xl rounded-bl-md bg-[hsl(var(--card))] border border-[hsl(var(--border))] text-sm text-muted-foreground animate-pulse-glow">
@@ -333,7 +490,7 @@ export default function ChatPage() {
               中断
             </Button>
           ) : (
-            <Button onClick={send} disabled={!input.trim()}>
+            <Button onClick={() => send()} disabled={!input.trim()}>
               <Send className="h-4 w-4" />
             </Button>
           )}
