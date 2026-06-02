@@ -44,6 +44,124 @@ describe('Strength Engine (旺衰)', () => {
     // 乙木 in 未月 = summer = control (木克土), should be +5 month order
     expect(result.monthOrder.score).toBe(5);
   });
+
+  it('should include 季节状态 factor in factors array', () => {
+    const result = analyzeStrength(bazi);
+    const seasonal = result.factors.find(f => f.name.startsWith('季节状态·'));
+    expect(seasonal).toBeDefined();
+    expect(['旺', '相', '休', '囚', '死']).toContain(seasonal!.name.split('·')[1]);
+  });
+
+  it('乙木 in 未月(夏) should be 休 state (木生火，生令者休)', () => {
+    const result = analyzeStrength(bazi);
+    const seasonal = result.factors.find(f => f.name.startsWith('季节状态·'));
+    expect(seasonal!.name).toBe('季节状态·休');
+    expect(seasonal!.score).toBe(-3);
+  });
+
+  it('丙火 in 午月(夏) should be 旺 state (火当令于夏)', () => {
+    const fireBirth: BirthInfo = {
+      year: 2000, month: 6, day: 15, hour: 12, minute: 0,
+      longitude: 116.4, isDST: false, gender: '男',
+    };
+    const fireBazi = calcBaZi(fireBirth);
+    if (fireBazi.day.stem.wuxing === '火') {
+      const result = analyzeStrength(fireBazi);
+      const seasonal = result.factors.find(f => f.name.startsWith('季节状态·'));
+      expect(seasonal!.name).toBe('季节状态·旺');
+      expect(seasonal!.score).toBe(5);
+    }
+  });
+
+  it('壬水 in 子月(冬) should be 旺 state (水当令于冬)', () => {
+    const waterBirth: BirthInfo = {
+      year: 2000, month: 1, day: 15, hour: 12, minute: 0,
+      longitude: 116.4, isDST: false, gender: '男',
+    };
+    const waterBazi = calcBaZi(waterBirth);
+    if (waterBazi.day.stem.wuxing === '水') {
+      const result = analyzeStrength(waterBazi);
+      const seasonal = result.factors.find(f => f.name.startsWith('季节状态·'));
+      expect(seasonal!.name).toBe('季节状态·旺');
+      expect(seasonal!.score).toBe(5);
+    }
+  });
+
+  it('庚金 in 午月(夏) should be 死 state (火克金，令克者死)', () => {
+    const metalBirth: BirthInfo = {
+      year: 2000, month: 6, day: 20, hour: 6, minute: 0,
+      longitude: 116.4, isDST: false, gender: '男',
+    };
+    const metalBazi = calcBaZi(metalBirth);
+    if (metalBazi.day.stem.wuxing === '金') {
+      const result = analyzeStrength(metalBazi);
+      const seasonal = result.factors.find(f => f.name.startsWith('季节状态·'));
+      expect(seasonal!.name).toBe('季节状态·死');
+      expect(seasonal!.score).toBe(-8);
+    }
+  });
+
+  it('scoring should include seasonalState field', () => {
+    const result = analyzeStrength(bazi);
+    expect(result.scoring.seasonalState).toBeDefined();
+    expect(typeof result.scoring.seasonalState).toBe('number');
+  });
+});
+
+// ---- Climate → Strength Integration Tests ----
+
+describe('Climate → Strength Integration (调候联动)', () => {
+  it('should accept climate parameter without error', () => {
+    const climate = analyzeClimate(bazi);
+    const result = analyzeStrength(bazi, climate);
+    expect(result.strengthScore).toBeGreaterThanOrEqual(0);
+  });
+
+  it('乙木 in 未月 should have 调候修正 factor when climate passed', () => {
+    const climate = analyzeClimate(bazi);
+    // 乙木 in 未月 = 夏木枯, medium priority, needs 水
+    const result = analyzeStrength(bazi, climate);
+    const climateFactor = result.factors.find(f => f.name === '调候修正');
+    expect(climateFactor).toBeDefined();
+    expect(climateFactor!.category).toBe('weaken');
+    // medium priority, check if 水 is present in chart
+    expect(climateFactor!.score).toBeLessThanOrEqual(-3);
+  });
+
+  it('scoring should include climateAdjustment when climate passed', () => {
+    const climate = analyzeClimate(bazi);
+    const result = analyzeStrength(bazi, climate);
+    expect(result.scoring.climateAdjustment).toBeDefined();
+    expect(typeof result.scoring.climateAdjustment).toBe('number');
+    expect(result.scoring.climateAdjustment).toBeLessThanOrEqual(0);
+  });
+
+  it('strengthScore should decrease when high-priority climate need exists', () => {
+    // Winter fire day master needs 木 fire support → high priority
+    const winterFireBirth: BirthInfo = {
+      year: 2000, month: 1, day: 15, hour: 12, minute: 0,
+      longitude: 116.4, isDST: false, gender: '男',
+    };
+    const winterFireBazi = calcBaZi(winterFireBirth);
+    if (winterFireBazi.day.stem.wuxing === '火') {
+      const withoutClimate = analyzeStrength(winterFireBazi);
+      const climate = analyzeClimate(winterFireBazi);
+      const withClimate = analyzeStrength(winterFireBazi, climate);
+
+      // Strength score should be lower when climate factor is applied
+      // (winter fire = 冬火弱, medium priority, needs 木)
+      if (climate.needsAdjustment && climate.priority !== 'none') {
+        expect(withClimate.strengthScore).toBeLessThanOrEqual(withoutClimate.strengthScore);
+      }
+    }
+  });
+
+  it('should still work without climate (backward compatible)', () => {
+    const result = analyzeStrength(bazi);
+    expect(result.strengthScore).toBeGreaterThanOrEqual(0);
+    const climateFactor = result.factors.find(f => f.name === '调候修正');
+    expect(climateFactor).toBeUndefined();
+  });
 });
 
 // ---- Structure Engine Tests ----

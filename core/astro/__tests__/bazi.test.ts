@@ -17,6 +17,12 @@ import {
   getShiShen,
   getHiddenStems,
   getNayin,
+  isClash,
+  isCombination,
+  COMBINATION_WUXING,
+  getPunishment,
+  isSelfPunishment,
+  isHarm,
 } from '../index.js';
 import type { BirthInfo } from '../types.js';
 
@@ -379,6 +385,81 @@ describe('LiuNian (流年)', () => {
       expect(ln.scores.overall).toBeGreaterThanOrEqual(0);
       expect(ln.scores.overall).toBeLessThanOrEqual(100);
     }
+  });
+});
+
+// ---- Earthly Branch Relations Tests ----
+
+describe('Earthly Branch Relations (刑冲合害)', () => {
+  describe('六冲 (Six Clashes)', () => {
+    it('子午冲', () => {
+      expect(isClash(0, 6)).toBe(true);
+      expect(isClash(6, 0)).toBe(true);
+    });
+    it('丑未冲', () => { expect(isClash(1, 7)).toBe(true); });
+    it('寅申冲', () => { expect(isClash(2, 8)).toBe(true); });
+    it('卯酉冲', () => { expect(isClash(3, 9)).toBe(true); });
+    it('辰戌冲', () => { expect(isClash(4, 10)).toBe(true); });
+    it('巳亥冲', () => { expect(isClash(5, 11)).toBe(true); });
+    it('non-clashing pairs should return false', () => {
+      expect(isClash(0, 1)).toBe(false);
+      expect(isClash(2, 3)).toBe(false);
+      expect(isClash(4, 5)).toBe(false);
+    });
+  });
+
+  describe('六合 (Six Combinations)', () => {
+    it('子丑合土', () => { expect(isCombination(0, 1)).toBe(true); expect(isCombination(1, 0)).toBe(true); });
+    it('寅亥合木', () => { expect(isCombination(2, 11)).toBe(true); });
+    it('卯戌合火', () => { expect(isCombination(3, 10)).toBe(true); });
+    it('辰酉合金', () => { expect(isCombination(4, 9)).toBe(true); });
+    it('巳申合水', () => { expect(isCombination(5, 8)).toBe(true); });
+    it('午未合土', () => { expect(isCombination(6, 7)).toBe(true); });
+    it('non-combining pairs should return false', () => {
+      expect(isCombination(0, 2)).toBe(false);
+    });
+    it('combination wuxing map should have correct elements', () => {
+      expect(COMBINATION_WUXING['0,1']).toBe('土');
+      expect(COMBINATION_WUXING['2,11']).toBe('木');
+      expect(COMBINATION_WUXING['3,10']).toBe('火');
+      expect(COMBINATION_WUXING['4,9']).toBe('金');
+      expect(COMBINATION_WUXING['5,8']).toBe('水');
+      expect(COMBINATION_WUXING['6,7']).toBe('土');
+    });
+  });
+
+  describe('三刑 (Punishments)', () => {
+    it('寅巳 → 无恩之刑', () => { expect(getPunishment(2, 5)).toBe('无恩之刑'); });
+    it('巳申 → 无恩之刑', () => { expect(getPunishment(5, 8)).toBe('无恩之刑'); });
+    it('寅申 → 无恩之刑', () => { expect(getPunishment(2, 8)).toBe('无恩之刑'); });
+    it('丑戌 → 恃势之刑', () => { expect(getPunishment(1, 10)).toBe('恃势之刑'); });
+    it('戌未 → 恃势之刑', () => { expect(getPunishment(10, 7)).toBe('恃势之刑'); });
+    it('丑未 → 恃势之刑', () => { expect(getPunishment(1, 7)).toBe('恃势之刑'); });
+    it('子卯 → 无礼之刑', () => { expect(getPunishment(0, 3)).toBe('无礼之刑'); });
+    it('non-punishing pairs should return null', () => {
+      expect(getPunishment(0, 1)).toBeNull();
+      expect(getPunishment(4, 6)).toBeNull();
+    });
+    it('自刑 branches', () => {
+      expect(isSelfPunishment(4)).toBe(true);  // 辰
+      expect(isSelfPunishment(6)).toBe(true);  // 午
+      expect(isSelfPunishment(9)).toBe(true);  // 酉
+      expect(isSelfPunishment(11)).toBe(true); // 亥
+      expect(isSelfPunishment(0)).toBe(false); // 子
+      expect(isSelfPunishment(1)).toBe(false); // 丑
+    });
+  });
+
+  describe('六害 (Six Harms)', () => {
+    it('子未害', () => { expect(isHarm(0, 7)).toBe(true); expect(isHarm(7, 0)).toBe(true); });
+    it('丑午害', () => { expect(isHarm(1, 6)).toBe(true); });
+    it('寅巳害', () => { expect(isHarm(2, 5)).toBe(true); });
+    it('卯辰害', () => { expect(isHarm(3, 4)).toBe(true); });
+    it('申亥害', () => { expect(isHarm(8, 11)).toBe(true); });
+    it('酉戌害', () => { expect(isHarm(9, 10)).toBe(true); });
+    it('non-harm pairs should return false', () => {
+      expect(isHarm(0, 1)).toBe(false);
+    });
   });
 });
 

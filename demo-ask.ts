@@ -1,5 +1,4 @@
 import { DestinyAgent } from './agent/agentEngine.js';
-import { createAutoClient } from './agent/llmClient.js';
 
 // Replace with your own birth info
 const birth = {

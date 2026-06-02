@@ -25,7 +25,9 @@
     "memory/**/*.ts",
     "visualization/**/*.ts",
     "data/**/*.ts",
-    "server.ts"
+    "server.ts",
+    "demo-ask.ts",
+    "repl.ts"
   ],
   "exclude": ["node_modules", "dist", "**/__tests__/**"]
 }

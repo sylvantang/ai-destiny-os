@@ -110,9 +110,9 @@ export class DestinyAgent {
     const currentYear = new Date().getFullYear();
     const liunian = calcLiuNian(bazi, currentYear, currentYear + 5);
 
-    const strength = analyzeStrength(bazi);
-    const structure = analyzeStructure(bazi, strength);
     const climate = analyzeClimate(bazi);
+    const strength = analyzeStrength(bazi, climate);
+    const structure = analyzeStructure(bazi, strength);
     const relations = analyzeRelations(bazi);
     const fortune = analyzeFortune(bazi, strength, structure, climate, relations, dayun, liunian);
 

@@ -4,9 +4,10 @@
 // stem/branch support, weakening, and earthly branch interactions.
 // ============================================================
 
-import type { BaZi, EarthlyBranchIndex } from '../astro/types.js';
+import type { BaZi, EarthlyBranchIndex, Wuxing } from '../astro/types.js';
 import { ALL_STEMS, HIDDEN_STEMS } from '../astro/constants.js';
 import { isClash, isCombination, COMBINATION_WUXING, getPunishment, isHarm } from '../astro/earthlyBranchRelations.js';
+import type { ClimateResult } from './climateEngine.js';
 
 // ---- Types ----
 
@@ -48,6 +49,65 @@ export interface StrengthResult {
   summary: string;
 }
 
+// ---- Seasonal State (旺相休囚死) ----
+
+type SeasonalState = '旺' | '相' | '休' | '囚' | '死';
+
+interface SeasonalEvaluation {
+  state: SeasonalState;
+  modifier: number;
+  description: string;
+}
+
+/** Season ruler element: 春木 夏火 秋金 冬水 */
+function getSeasonRuler(monthBranch: EarthlyBranchIndex): Wuxing {
+  // 寅卯辰=春→木, 巳午未=夏→火, 申酉戌=秋→金, 亥子丑=冬→水
+  if (monthBranch >= 2 && monthBranch <= 4) return '木';
+  if (monthBranch >= 5 && monthBranch <= 7) return '火';
+  if (monthBranch >= 8 && monthBranch <= 10) return '金';
+  return '水';
+}
+
+/**
+ * 旺相休囚死 lookup: [seasonRuler][dayMasterWuxing] → SeasonalEvaluation
+ *
+ *  当令者旺 — the seasonal ruler element is 旺
+ *  令生者相 — what the ruler generates is 相 (secondary strength)
+ *  生令者休 — what generates the ruler is 休 (drained)
+ *  克令者囚 — what controls the ruler is 囚 (restrained)
+ *  令克者死 — what the ruler controls is 死 (weakest)
+ */
+function getSeasonalState(
+  dmWx: Wuxing,
+  monthBranch: EarthlyBranchIndex,
+): SeasonalEvaluation {
+  const ruler = getSeasonRuler(monthBranch);
+  const dm = dmWx;
+
+  // Same element as ruler → 旺
+  if (dm === ruler) {
+    return { state: '旺', modifier: 5, description: `日主${dm}当令而旺，得${ruler}气加持` };
+  }
+
+  // Ruler generates dm → 相
+  if (generates(ruler, dm)) {
+    return { state: '相', modifier: 3, description: `日主${dm}次旺，受当令${ruler}气所生` };
+  }
+
+  // Dm generates ruler → 休
+  if (generates(dm, ruler)) {
+    return { state: '休', modifier: -3, description: `日主${dm}泄气于当令${ruler}，季节不助` };
+  }
+
+  // Dm controls ruler → 囚
+  if (controls(dm, ruler)) {
+    return { state: '囚', modifier: -5, description: `日主${dm}受当令${ruler}所制，季节不利` };
+  }
+
+  // Ruler controls dm → 死
+  return { state: '死', modifier: -8, description: `日主${dm}被当令${ruler}所克，季节最弱` };
+}
+
 // ---- Constants ----
 
 const LEVEL_LABELS: Record<StrengthLevel, string> = {
@@ -60,7 +120,7 @@ const LEVEL_LABELS: Record<StrengthLevel, string> = {
 
 // ---- Main ----
 
-export function analyzeStrength(bazi: BaZi): StrengthResult {
+export function analyzeStrength(bazi: BaZi, climate?: ClimateResult): StrengthResult {
   const dm = bazi.day.stemIndex;
   const dmStem = ALL_STEMS[dm]!;
   const dmWx = dmStem.wuxing;
@@ -71,13 +131,25 @@ export function analyzeStrength(bazi: BaZi): StrengthResult {
   const branchSupport = analyzeBranchSupport(bazi, dmWx);
   const weakening = analyzeWeakening(bazi, dmWx);
 
+  // 旺相休囚死 seasonal state
+  const seasonal = getSeasonalState(dmWx, bazi.month.branchIndex);
+
   // 刑冲合害 interaction factors
   const interactions = analyzeInteractions(bazi, dmWx);
+
+  // Climate adjustment (调候联动)
+  const climateFactor = climate ? buildClimateFactor(climate, bazi) : null;
 
   // Assemble all factors into a flat array
   const factors: StrengthFactor[] = [
     { name: '月令', category: 'support', score: monthOrder.score, description: monthOrder.description },
     { name: '基础分', category: 'support', score: 35, description: '基础旺衰分' },
+    {
+      name: `季节状态·${seasonal.state}`,
+      category: seasonal.modifier >= 0 ? 'support' : 'weaken',
+      score: seasonal.modifier,
+      description: seasonal.description,
+    },
     ...roots.map(r => ({
       name: `通根·${r.pillar}`,
       category: 'support' as const,
@@ -97,6 +169,7 @@ export function analyzeStrength(bazi: BaZi): StrengthResult {
       score: -w.score,
       description: `${w.pillar}${w.stem}${w.reason}`,
     })),
+    ...(climateFactor ? [climateFactor] : []),
     ...interactions,
   ];
 
@@ -107,10 +180,12 @@ export function analyzeStrength(bazi: BaZi): StrengthResult {
   const scoring = {
     base: 35,
     monthOrder: monthOrder.score,
+    seasonalState: seasonal.modifier,
     roots: roots.reduce((s, r) => s + r.score, 0),
     stemSupport: stemSupport.reduce((s, r) => s + r.score, 0),
     branchSupport: branchSupport.score,
     weakening: weakening.reduce((s, w) => s + w.score, 0),
+    climateAdjustment: climateFactor?.score ?? 0,
     total: clampedScore,
   };
 
@@ -128,6 +203,51 @@ export function analyzeStrength(bazi: BaZi): StrengthResult {
     scoring,
     summary: buildSummary(dmStem.name, dmWx, clampedScore, level, monthOrder, roots, stemSupport, weakening),
   };
+}
+
+function buildClimateFactor(climate: ClimateResult, bazi: BaZi): StrengthFactor | null {
+  if (!climate.needsAdjustment || climate.priority === 'none') return null;
+
+  // Check if the needed wuxing is present in the chart
+  const hasNeeded = checkWuxingPresence(bazi, climate.neededWuxing);
+
+  let score: number;
+  let description: string;
+
+  switch (climate.priority) {
+    case 'high':
+      score = hasNeeded ? -6 : -10;
+      description = hasNeeded
+        ? `调候急需${climate.neededWuxing}（${climate.condition}），命局已有${climate.neededWuxing}，部分缓解`
+        : `调候急需${climate.neededWuxing}（${climate.condition}），命局缺乏，严重不利日主`;
+      break;
+    case 'medium':
+      score = hasNeeded ? -3 : -5;
+      description = hasNeeded
+        ? `调候需${climate.neededWuxing}（${climate.condition}），命局已有，影响较小`
+        : `调候需${climate.neededWuxing}（${climate.condition}），命局暂无`;
+      break;
+    case 'low':
+      score = -2;
+      description = `调候${climate.condition}，影响轻微`;
+      break;
+    default:
+      return null;
+  }
+
+  return {
+    name: '调候修正',
+    category: 'weaken',
+    score,
+    description,
+  };
+}
+
+/** Check if a wuxing element is present in the chart's stems or branches */
+function checkWuxingPresence(bazi: BaZi, wx: string | null): boolean {
+  if (!wx) return false;
+  const pillars = [bazi.year, bazi.month, bazi.day, bazi.hour];
+  return pillars.some(p => p.stem.wuxing === wx || p.branch.wuxing === wx);
 }
 
 // ---- 刑冲合害 Analysis ----

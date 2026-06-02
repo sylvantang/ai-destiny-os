@@ -9,7 +9,7 @@ import * as os from 'node:os';
 import { DestinyAgent } from './agent/agentEngine.js';
 import { LLMClient, createAutoClient } from './agent/llmClient.js';
 import type { BirthInfo } from './core/astro/types.js';
-import type { ChatMessage } from './agent/llmClient.js';
+
 
 // ---- Constants ----
 
