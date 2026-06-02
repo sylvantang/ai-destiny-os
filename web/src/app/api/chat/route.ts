@@ -81,8 +81,8 @@ export async function POST(request: Request) {
         if (sessionId && fullText) {
           try {
             const { addSessionTurn } = await import('@engine/data/database.js');
-            addSessionTurn(sessionId, 'user', message);
-            addSessionTurn(sessionId, 'agent', fullText);
+            addSessionTurn(sessionId, 'user', message).catch(() => {});
+            addSessionTurn(sessionId, 'agent', fullText).catch(() => {});
           } catch { /* best-effort */ }
         }
       } catch (err) {

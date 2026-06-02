@@ -18,7 +18,7 @@ export async function POST(request: Request) {
 
     const sessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const userId = body.userId ?? `user_${birth.year}${birth.month}${birth.day}`;
-    const session = createSession(sessionId, userId, birth);
+    const session = await createSession(sessionId, userId, birth);
 
     return NextResponse.json({
       sessionId: session.id,
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
-    const sessions = listSessions();
+    const sessions = await listSessions();
     return NextResponse.json(
       sessions.map((s) => ({
         id: s.id,

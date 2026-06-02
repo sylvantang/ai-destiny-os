@@ -70,15 +70,15 @@ export class MemoryStore {
   /**
    * Enable SQLite persistence for this store.
    * On first call, tries to load existing data from the database.
-   * After enabling, every mutation auto-saves to the database.
+   * After enabling, every mutation auto-saves to the database (fire-and-forget).
    * Returns true if existing data was loaded, false if starting fresh.
    */
-  enablePersistence(): boolean {
+  async enablePersistence(): Promise<boolean> {
     if (this._persist) return false;
     this._persist = true;
 
     const userId = this.snapshot.user.id;
-    const existing = loadMemorySnapshot(userId);
+    const existing = await loadMemorySnapshot(userId);
     if (existing) {
       try {
         const loaded = JSON.parse(existing) as MemorySnapshot;
@@ -90,25 +90,24 @@ export class MemoryStore {
         // Corrupt data — start fresh
       }
     }
-    // Save initial state
+    // Save initial state (fire-and-forget)
     this.persist();
     return false;
   }
 
-  /** Manually persist the current snapshot to SQLite. */
+  /** Manually persist the current snapshot to SQLite (fire-and-forget). */
   persist(): void {
     if (!this._persist) return;
-    try {
-      saveMemorySnapshot(this.snapshot.user.id, JSON.stringify(this.snapshot));
-      this.dirty = false;
-    } catch {
+    const data = JSON.stringify(this.snapshot);
+    saveMemorySnapshot(this.snapshot.user.id, data).catch(() => {
       // Best-effort persistence
-    }
+    });
+    this.dirty = false;
   }
 
   /** Load a store from SQLite. Returns null if no data exists for this user. */
-  static load(userId: string): MemoryStore | null {
-    const raw = loadMemorySnapshot(userId);
+  static async load(userId: string): Promise<MemoryStore | null> {
+    const raw = await loadMemorySnapshot(userId);
     if (!raw) return null;
     try {
       const data = JSON.parse(raw) as MemorySnapshot;

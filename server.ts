@@ -98,9 +98,9 @@ async function handleChart(req: IncomingMessage, res: ServerResponse): Promise<v
 
     const chartPayload = buildChartPayload(agent);
 
-    // Save to database (fire-and-forget, don't block on DB errors)
+    // Save to database
     try {
-      const record = saveRecord(birth, chartPayload);
+      const record = await saveRecord(birth, chartPayload);
       res.setHeader('X-Record-Id', record.id);
     } catch { /* DB save is best-effort */ }
 
@@ -201,13 +201,11 @@ async function handleAsk(req: IncomingMessage, res: ServerResponse): Promise<voi
 
     // Persist conversation turn if sessionId provided
     if (sessionId) {
-      try {
-        addSessionTurn(sessionId, 'user', question, response.topic);
-        addSessionTurn(sessionId, 'agent', response.text, response.topic);
-      } catch { /* best-effort */ }
+      addSessionTurn(sessionId, 'user', question, response.topic).catch(() => {});
+      addSessionTurn(sessionId, 'agent', response.text, response.topic).catch(() => {});
     }
     if (recordId) {
-      try { saveAnalysis(recordId, question, response.text, response.topic); } catch { /* best-effort */ }
+      saveAnalysis(recordId, question, response.text, response.topic).catch(() => {});
     }
     return;
   }
@@ -226,9 +224,9 @@ async function handleAsk(req: IncomingMessage, res: ServerResponse): Promise<voi
   let fullText = '';
   let finalTopic = '';
 
-  // Save user turn if sessionId provided
+  // Save user turn if sessionId provided (fire-and-forget)
   if (sessionId) {
-    try { addSessionTurn(sessionId, 'user', question); } catch { /* best-effort */ }
+    addSessionTurn(sessionId, 'user', question).catch(() => {});
   }
 
   try {
@@ -249,35 +247,35 @@ async function handleAsk(req: IncomingMessage, res: ServerResponse): Promise<voi
 
   res.end();
 
-  // Persist agent turn if sessionId provided
+  // Persist agent turn if sessionId provided (fire-and-forget)
   if (sessionId && fullText) {
-    try { addSessionTurn(sessionId, 'agent', fullText, finalTopic || undefined); } catch { /* best-effort */ }
+    addSessionTurn(sessionId, 'agent', fullText, finalTopic || undefined).catch(() => {});
   }
   if (recordId && fullText) {
-    try { saveAnalysis(recordId, question, fullText, finalTopic); } catch { /* best-effort */ }
+    saveAnalysis(recordId, question, fullText, finalTopic).catch(() => {});
   }
 }
 
 // ---- Record Management ----
 
-function handleRecords(_req: IncomingMessage, res: ServerResponse): void {
+async function handleRecords(_req: IncomingMessage, res: ServerResponse): Promise<void> {
   try {
-    const records = listRecords().map(r => ({
+    const records = await listRecords();
+    json(res, records.map(r => ({
       id: r.id,
       name: r.name,
       birthInfo: r.birthInfo,
       createdAt: r.createdAt,
-    }));
-    json(res, records);
-  } catch (err) {
+    })));
+  } catch {
     json(res, { error: 'Failed to list records' }, 500);
   }
 }
 
-function handleRecord(req: IncomingMessage, res: ServerResponse, id: number): void {
+async function handleRecord(req: IncomingMessage, res: ServerResponse, id: number): Promise<void> {
   if (req.method === 'DELETE') {
     try {
-      deleteRecord(id);
+      await deleteRecord(id);
       json(res, { ok: true });
     } catch {
       json(res, { error: 'Failed to delete record' }, 500);
@@ -286,7 +284,7 @@ function handleRecord(req: IncomingMessage, res: ServerResponse, id: number): vo
   }
 
   try {
-    const record = getRecord(id);
+    const record = await getRecord(id);
     if (!record) return json(res, { error: 'Record not found' }, 404);
     json(res, {
       id: record.id,
@@ -300,9 +298,9 @@ function handleRecord(req: IncomingMessage, res: ServerResponse, id: number): vo
   }
 }
 
-function handleRecordHistory(_req: IncomingMessage, res: ServerResponse, id: number): void {
+async function handleRecordHistory(_req: IncomingMessage, res: ServerResponse, id: number): Promise<void> {
   try {
-    const history = getHistory(id);
+    const history = await getHistory(id);
     json(res, history.map(h => ({
       id: h.id,
       question: h.question,
@@ -352,16 +350,16 @@ async function handleCreateSession(req: IncomingMessage, res: ServerResponse): P
   const userId = String(body['userId'] ?? `user_${birth.year}${birth.month}${birth.day}`);
 
   try {
-    const session = createSession(sessionId, userId, birth);
+    const session = await createSession(sessionId, userId, birth);
     json(res, { sessionId: session.id, userId: session.userId, createdAt: session.createdAt }, 201);
-  } catch (err) {
+  } catch {
     json(res, { error: 'Failed to create session' }, 500);
   }
 }
 
-function handleListSessions(_req: IncomingMessage, res: ServerResponse): void {
+async function handleListSessions(_req: IncomingMessage, res: ServerResponse): Promise<void> {
   try {
-    const sessions = listSessions();
+    const sessions = await listSessions();
     json(res, sessions.map(s => ({
       id: s.id,
       userId: s.userId,
@@ -373,12 +371,12 @@ function handleListSessions(_req: IncomingMessage, res: ServerResponse): void {
   }
 }
 
-function handleGetSession(_req: IncomingMessage, res: ServerResponse, sessionId: string): void {
+async function handleGetSession(_req: IncomingMessage, res: ServerResponse, sessionId: string): Promise<void> {
   try {
-    const session = getSession(sessionId);
+    const session = await getSession(sessionId);
     if (!session) return json(res, { error: 'Session not found' }, 404);
 
-    const turns = getSessionTurns(sessionId);
+    const turns = await getSessionTurns(sessionId);
     json(res, {
       id: session.id,
       userId: session.userId,
@@ -398,11 +396,11 @@ function handleGetSession(_req: IncomingMessage, res: ServerResponse, sessionId:
   }
 }
 
-function handleDeleteSession(_req: IncomingMessage, res: ServerResponse, sessionId: string): void {
+async function handleDeleteSession(_req: IncomingMessage, res: ServerResponse, sessionId: string): Promise<void> {
   try {
-    const session = getSession(sessionId);
+    const session = await getSession(sessionId);
     if (!session) return json(res, { error: 'Session not found' }, 404);
-    deleteSession(sessionId);
+    await deleteSession(sessionId);
     json(res, { ok: true });
   } catch {
     json(res, { error: 'Failed to delete session' }, 500);

@@ -7,10 +7,10 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const session = getSession(id);
+    const session = await getSession(id);
     if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 });
 
-    const turns = getSessionTurns(id);
+    const turns = await getSessionTurns(id);
     return NextResponse.json({
       id: session.id,
       userId: session.userId,
@@ -36,9 +36,9 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const session = getSession(id);
+    const session = await getSession(id);
     if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 });
-    deleteSession(id);
+    await deleteSession(id);
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ error: 'Failed to delete session' }, { status: 500 });
