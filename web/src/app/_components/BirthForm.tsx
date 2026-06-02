@@ -130,7 +130,7 @@ export function BirthForm({
                 {c.label}
               </option>
             ))}
-            <option value={CUSTOM_CITY_VALUE}>其他城市</option>
+            <option value={CUSTOM_CITY_VALUE}>其他(手动输入)</option>
           </select>
         </Field>
         {showCustomLng && (
@@ -147,15 +147,32 @@ export function BirthForm({
           </Field>
         )}
         <Field label="性别">
-          <select
-            value={value.gender}
-            onChange={set('gender')}
-            disabled={readonly}
-            className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <option value="男">男</option>
-            <option value="女">女</option>
-          </select>
+          <div className="flex gap-0 h-9 rounded-lg border border-input overflow-hidden">
+            <button
+              type="button"
+              disabled={readonly}
+              onClick={() => onChange({ ...value, gender: '男' })}
+              className={`flex-1 text-sm font-medium transition-colors ${
+                value.gender === '男'
+                  ? 'bg-destiny-600 text-white'
+                  : 'bg-background text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              男
+            </button>
+            <button
+              type="button"
+              disabled={readonly}
+              onClick={() => onChange({ ...value, gender: '女' })}
+              className={`flex-1 text-sm font-medium transition-colors ${
+                value.gender === '女'
+                  ? 'bg-destiny-600 text-white'
+                  : 'bg-background text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              女
+            </button>
+          </div>
         </Field>
       </div>
     </div>
