@@ -81,21 +81,21 @@ export function BirthForm({
       {/* Year / Month / Day / Hour / Minute */}
       <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
         <Field label="年">
-          <Input type="number" value={value.year} onChange={set('year')} disabled={readonly} className="h-9 text-sm" />
+          <Input type="number" value={value.year} onChange={set('year')} disabled={readonly} className="h-9 text-sm text-white" />
         </Field>
         <Field label="月">
-          <Input type="number" value={value.month} onChange={set('month')} min={1} max={12} disabled={readonly} className="h-9 text-sm" />
+          <Input type="number" value={value.month} onChange={set('month')} min={1} max={12} disabled={readonly} className="h-9 text-sm text-white" />
         </Field>
         <Field label="日">
-          <Input type="number" value={value.day} onChange={set('day')} min={1} max={31} disabled={readonly} className="h-9 text-sm" />
+          <Input type="number" value={value.day} onChange={set('day')} min={1} max={31} disabled={readonly} className="h-9 text-sm text-white" />
         </Field>
         {!unknownHour && (
           <>
             <Field label="时">
-              <Input type="number" value={value.hour} onChange={set('hour')} min={0} max={23} disabled={readonly} className="h-9 text-sm" />
+              <Input type="number" value={value.hour} onChange={set('hour')} min={0} max={23} disabled={readonly} className="h-9 text-sm text-white" />
             </Field>
             <Field label="分">
-              <Input type="number" value={value.minute} onChange={set('minute')} min={0} max={59} disabled={readonly} className="h-9 text-sm" />
+              <Input type="number" value={value.minute} onChange={set('minute')} min={0} max={59} disabled={readonly} className="h-9 text-sm text-white" />
             </Field>
           </>
         )}
@@ -143,7 +143,7 @@ export function BirthForm({
               disabled={readonly}
               placeholder="116.4"
               step="0.1"
-              className="h-9 text-sm"
+              className="h-9 text-sm text-white"
             />
           </Field>
         )}
