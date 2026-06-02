@@ -326,39 +326,50 @@ export class LLMClient {
   } {
     const systemMsg = messages.find(m => m.role === 'system');
 
-    const chatMsgs = messages
-      .filter(m => m.role !== 'system')
-      .map(m => {
-        const msg: Record<string, unknown> = { role: m.role };
-        if (m.role === 'tool') {
-          // Anthropic requires a user message with tool_result content blocks
-          msg.role = 'user';
-          msg.content = [{
+    const chatMsgs: Record<string, unknown>[] = [];
+    const nonSystem = messages.filter(m => m.role !== 'system');
+
+    let i = 0;
+    while (i < nonSystem.length) {
+      const m = nonSystem[i]!;
+
+      if (m.role === 'tool') {
+        // Merge consecutive tool messages into a single user message
+        // — Anthropic requires all tool_results for a given assistant's
+        // tool_use blocks to be in the same next user message.
+        const toolResults: Record<string, unknown>[] = [];
+        while (i < nonSystem.length && nonSystem[i]!.role === 'tool') {
+          const tm = nonSystem[i]!;
+          toolResults.push({
             type: 'tool_result',
-            tool_use_id: m.tool_call_id ?? '',
-            content: m.content ?? '',
-          }];
-        } else if (m.role === 'assistant' && m.tool_calls) {
-          // Convert assistant tool_calls to Anthropic content blocks.
-          // Include any text content as a text block first, then tool_use blocks.
-          const blocks: Record<string, unknown>[] = [];
-          if (m.content) {
-            blocks.push({ type: 'text', text: m.content });
-          }
-          for (const tc of m.tool_calls) {
-            blocks.push({
-              type: 'tool_use',
-              id: tc.id,
-              name: tc.function.name,
-              input: safeParseJSON(tc.function.arguments) ?? {},
-            });
-          }
-          msg.content = blocks;
-        } else {
-          msg.content = m.content ?? '';
+            tool_use_id: tm.tool_call_id ?? '',
+            content: tm.content ?? '',
+          });
+          i++;
         }
-        return msg;
-      });
+        chatMsgs.push({ role: 'user', content: toolResults });
+        continue;
+      }
+
+      if (m.role === 'assistant' && m.tool_calls) {
+        const blocks: Record<string, unknown>[] = [];
+        if (m.content) {
+          blocks.push({ type: 'text', text: m.content });
+        }
+        for (const tc of m.tool_calls) {
+          blocks.push({
+            type: 'tool_use',
+            id: tc.id,
+            name: tc.function.name,
+            input: safeParseJSON(tc.function.arguments) ?? {},
+          });
+        }
+        chatMsgs.push({ role: m.role, content: blocks });
+      } else {
+        chatMsgs.push({ role: m.role, content: m.content ?? '' });
+      }
+      i++;
+    }
 
     return { systemMsg, chatMsgs };
   }
