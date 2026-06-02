@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { BirthForm, birthToPayload, defaultBirth, type BirthInfo } from '../_components/BirthForm';
 import { Send, ChevronDown, ChevronUp, Sparkles, ThumbsUp, ThumbsDown, RefreshCw, AlertTriangle } from 'lucide-react';
+import { stripAnsi } from '@/lib/utils';
 
 // ---- Types ----
 
@@ -224,7 +225,7 @@ export default function ChatPage() {
                 const updated = [...prev];
                 const last = updated[updated.length - 1];
                 if (last && last.role === 'agent' && last.isStreaming) {
-                  last.text += event.content;
+                  last.text += stripAnsi(event.content);
                 }
                 return updated;
               });

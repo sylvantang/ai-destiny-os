@@ -11,7 +11,7 @@ import { analyzeRelations } from '@engine/core/destiny/relationEngine.js';
 import { analyzeFortune } from '@engine/core/destiny/fortuneEngine.js';
 import { deriveYongShen } from '@engine/core/destiny/yongShenEngine.js';
 import { buildReportCard } from '@engine/ai/promptBuilder.js';
-import { renderChart } from '@engine/visualization/chartRenderer.js';
+import { renderChartPlain } from '@engine/visualization/chartRenderer.js';
 import { renderDashboard } from '@engine/visualization/dashboard.js';
 
 export async function POST(request: Request) {
@@ -103,7 +103,7 @@ export async function POST(request: Request) {
         theme: relations.dominantTheme,
         summary: relations.summary,
       },
-      visualization: renderChart(chart),
+      visualization: renderChartPlain(chart),
     });
   } catch (err) {
     return NextResponse.json(
