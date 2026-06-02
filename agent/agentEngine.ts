@@ -32,6 +32,7 @@ import { buildDestinyContext } from './context.js';
 import { detectTopic } from './router.js';
 import { DeterministicProvider } from './providers/deterministic.js';
 import { LLMProvider } from './providers/llmProvider.js';
+import type { ToolContext } from './tools/types.js';
 
 // ---- Agent State ----
 
@@ -116,7 +117,7 @@ export class DestinyAgent {
     };
 
     this.deterministic = new DeterministicProvider();
-    this.llmProvider = this.llm ? new LLMProvider(this.llm) : null;
+    this.llmProvider = this.llm ? new LLMProvider(this.llm, this.toolContext) : null;
   }
 
   // ---- Query Processing ----
@@ -124,6 +125,22 @@ export class DestinyAgent {
   private get providerState() {
     const { chart, ctx, personality, career, relationship, strategy } = this.state;
     return { chart, ctx, personality, career, relationship, strategy };
+  }
+
+  private get toolContext(): ToolContext {
+    return {
+      chart: this.state.chart,
+      ctx: this.state.ctx,
+      personality: this.state.personality,
+      career: this.state.career,
+      relationship: this.state.relationship,
+      strategy: this.state.strategy,
+      memory: this.state.memory,
+      history: this.state.history.map(h => ({
+        role: h.role === 'agent' ? 'agent' as const : 'user' as const,
+        content: h.content,
+      })),
+    };
   }
 
   /**
@@ -158,7 +175,11 @@ export class DestinyAgent {
    */
   setLLM(llm: LLMClient): void {
     this.llm = llm;
-    this.llmProvider = new LLMProvider(llm);
+    this.llmProvider = new LLMProvider(llm, this.toolContext);
+    // Update tool context on existing provider
+    if (this.llmProvider) {
+      this.llmProvider.setToolContext(this.toolContext);
+    }
   }
 
   /**

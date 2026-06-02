@@ -1,7 +1,7 @@
 // ============================================================
 // AI Destiny OS — Agent Layer: LLM Client
 // Native fetch-based clients for OpenAI and Anthropic APIs.
-// Zero additional dependencies.
+// Supports tool calling (function calling) for the agentic loop.
 // ============================================================
 
 // ---- Types ----
@@ -21,19 +21,49 @@ export interface LLMConfig {
   temperature?: number;
 }
 
+// ---- Tool Calling Types ----
+
+/** OpenAI function-calling tool definition format. */
+export interface ToolDef {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
+}
+
+/** A tool call requested by the LLM. */
+export interface ToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string; // JSON string
+  };
+}
+
+// ---- Message Types ----
+
 export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: string | null;
+  /** Present on assistant messages when the LLM requests tool calls. */
+  tool_calls?: ToolCall[];
+  /** Present on tool messages — the ID of the tool call this responds to. */
+  tool_call_id?: string;
 }
 
 export interface LLMResponse {
-  content: string;
+  content: string | null;
   model: string;
   usage?: {
     inputTokens: number;
     outputTokens: number;
   };
   finishReason?: string;
+  /** Tool calls requested by the LLM (if any). Provider resolves these. */
+  toolCalls?: ToolCall[];
 }
 
 export interface LLMStreamEvent {
@@ -58,16 +88,18 @@ export class LLMClient {
 
   /**
    * Send a chat completion request (non-streaming).
+   * Pass `tools` to enable function calling — the response may include tool_calls.
    */
-  async chat(messages: ChatMessage[]): Promise<LLMResponse> {
+  async chat(messages: ChatMessage[], tools?: ToolDef[]): Promise<LLMResponse> {
     if (this.config.provider === 'openai') {
-      return this.callOpenAI(messages);
+      return this.callOpenAI(messages, tools);
     }
-    return this.callAnthropic(messages);
+    return this.callAnthropic(messages, tools);
   }
 
   /**
    * Stream a chat completion, yielding tokens as they arrive.
+   * Note: tools are not supported during streaming. Use chat() for the agentic loop.
    */
   async *stream(messages: ChatMessage[]): AsyncGenerator<LLMStreamEvent> {
     if (this.config.provider === 'openai') {
@@ -83,13 +115,17 @@ export class LLMClient {
     return `${this.config.baseURL ?? 'https://api.openai.com'}/v1/chat/completions`;
   }
 
-  private async callOpenAI(messages: ChatMessage[]): Promise<LLMResponse> {
-    const body = {
+  private async callOpenAI(messages: ChatMessage[], tools?: ToolDef[]): Promise<LLMResponse> {
+    const body: Record<string, unknown> = {
       model: this.config.model,
-      messages,
+      messages: messages.map(m => this.toOpenAIMessage(m)),
       max_tokens: this.config.maxTokens,
       temperature: this.config.temperature,
     };
+    if (tools && tools.length > 0) {
+      body.tools = tools;
+      body.tool_choice = 'auto';
+    }
 
     const res = await fetch(this.openAIURL, {
       method: 'POST',
@@ -103,24 +139,45 @@ export class LLMClient {
     }
 
     const data = await res.json() as Record<string, unknown>;
-    const choice = (data as { choices: Array<{ message: { content: string }; finish_reason: string }> }).choices[0];
+    const choice = (data as { choices: Array<{ message: { content: string | null; tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }> }; finish_reason: string }> }).choices[0];
     const usage = (data as { usage?: { prompt_tokens: number; completion_tokens: number } }).usage;
 
+    const msg = choice?.message;
+    const toolCalls = msg?.tool_calls?.map((tc): ToolCall => ({
+      id: tc.id,
+      type: 'function',
+      function: { name: tc.function.name, arguments: tc.function.arguments },
+    }));
+
     return {
-      content: choice?.message?.content ?? '',
+      content: msg?.content ?? null,
       model: (data as { model: string }).model,
       usage: usage ? {
         inputTokens: usage.prompt_tokens,
         outputTokens: usage.completion_tokens,
       } : undefined,
       finishReason: choice?.finish_reason,
+      toolCalls,
     };
   }
 
+  /** Convert internal ChatMessage to OpenAI API format. */
+  private toOpenAIMessage(m: ChatMessage): Record<string, unknown> {
+    const msg: Record<string, unknown> = { role: m.role };
+    if (m.tool_calls) {
+      msg.tool_calls = m.tool_calls;
+    }
+    if (m.tool_call_id) {
+      msg.tool_call_id = m.tool_call_id;
+    }
+    msg.content = m.content ?? '';
+    return msg;
+  }
+
   private async *streamOpenAI(messages: ChatMessage[]): AsyncGenerator<LLMStreamEvent> {
-    const body = {
+    const body: Record<string, unknown> = {
       model: this.config.model,
-      messages,
+      messages: messages.map(m => this.toOpenAIMessage(m)),
       max_tokens: this.config.maxTokens,
       temperature: this.config.temperature,
       stream: true,
@@ -191,22 +248,22 @@ export class LLMClient {
     return `${this.config.baseURL ?? 'https://api.anthropic.com'}/v1/messages`;
   }
 
-  private async callAnthropic(messages: ChatMessage[]): Promise<LLMResponse> {
-    const systemMsg = messages.find(m => m.role === 'system');
-    const chatMessages = messages
-      .filter(m => m.role !== 'system')
-      .map(m => ({ role: m.role, content: m.content }));
+  private async callAnthropic(messages: ChatMessage[], tools?: ToolDef[]): Promise<LLMResponse> {
+    const { systemMsg, chatMsgs } = this.splitAnthropicMessages(messages);
 
     const body: Record<string, unknown> = {
       model: this.config.model,
       max_tokens: this.config.maxTokens,
-      messages: chatMessages,
+      messages: chatMsgs,
     };
     if (systemMsg) {
       body.system = systemMsg.content;
     }
     if (this.config.temperature !== undefined) {
       body.temperature = this.config.temperature;
+    }
+    if (tools && tools.length > 0) {
+      body.tools = tools.map(t => this.toAnthropicTool(t));
     }
 
     const res = await fetch(this.anthropicURL, {
@@ -221,28 +278,85 @@ export class LLMClient {
     }
 
     const data = await res.json() as Record<string, unknown>;
-    const content = (data as { content: Array<{ type: string; text: string }> }).content
-      .filter(c => c.type === 'text')
-      .map(c => c.text)
-      .join('');
+    const content = (data as { content: Array<{ type: string; text?: string; id?: string; name?: string; input?: Record<string, unknown> }> }).content;
+
+    const textBlocks = content.filter(c => c.type === 'text');
+    const toolUseBlocks = content.filter(c => c.type === 'tool_use');
+
+    const text = textBlocks.map(c => c.text ?? '').join('') || null;
+    const toolCalls: ToolCall[] | undefined = toolUseBlocks.length > 0
+      ? toolUseBlocks.map(tu => ({
+          id: tu.id!,
+          type: 'function' as const,
+          function: {
+            name: tu.name!,
+            arguments: JSON.stringify(tu.input ?? {}),
+          },
+        }))
+      : undefined;
+
     const usage = (data as { usage?: { input_tokens: number; output_tokens: number } }).usage;
 
     return {
-      content,
+      content: text,
       model: (data as { model: string }).model,
       usage: usage ? {
         inputTokens: usage.input_tokens,
         outputTokens: usage.output_tokens,
       } : undefined,
       finishReason: (data as { stop_reason?: string }).stop_reason,
+      toolCalls,
     };
+  }
+
+  /** Convert OpenAI-format tool def to Anthropic format. */
+  private toAnthropicTool(tool: ToolDef): Record<string, unknown> {
+    const f = tool.function;
+    return {
+      name: f.name,
+      description: f.description,
+      input_schema: f.parameters,
+    };
+  }
+
+  /** Split messages into Anthropic format: system prompt + chat messages. */
+  private splitAnthropicMessages(messages: ChatMessage[]): {
+    systemMsg: ChatMessage | undefined;
+    chatMsgs: Record<string, unknown>[];
+  } {
+    const systemMsg = messages.find(m => m.role === 'system');
+
+    const chatMsgs = messages
+      .filter(m => m.role !== 'system')
+      .map(m => {
+        const msg: Record<string, unknown> = { role: m.role };
+        if (m.role === 'tool') {
+          // Anthropic uses user messages with tool_result content blocks
+          msg.role = 'user';
+          // content is a string from our tool result
+          msg.content = m.content ?? '';
+        } else if (m.role === 'assistant' && m.tool_calls) {
+          // Convert assistant tool_calls to Anthropic tool_use content blocks
+          msg.content = m.tool_calls.map(tc => ({
+            type: 'tool_use',
+            id: tc.id,
+            name: tc.function.name,
+            input: safeParseJSON(tc.function.arguments) ?? {},
+          }));
+        } else {
+          msg.content = m.content ?? '';
+        }
+        return msg;
+      });
+
+    return { systemMsg, chatMsgs };
   }
 
   private async *streamAnthropic(messages: ChatMessage[]): AsyncGenerator<LLMStreamEvent> {
     const systemMsg = messages.find(m => m.role === 'system');
     const chatMessages = messages
       .filter(m => m.role !== 'system')
-      .map(m => ({ role: m.role, content: m.content }));
+      .map(m => ({ role: m.role, content: m.content ?? '' }));
 
     const body: Record<string, unknown> = {
       model: this.config.model,
@@ -320,6 +434,14 @@ export class LLMClient {
 }
 
 // ---- Helpers ----
+
+function safeParseJSON(raw: string): Record<string, unknown> | null {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Create an OpenAI-compatible client from environment variables.
