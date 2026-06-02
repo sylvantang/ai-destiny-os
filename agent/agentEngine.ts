@@ -4,21 +4,7 @@
 // ============================================================
 
 import type { BirthInfo, DestinyChart } from '../core/astro/types.js';
-import { calcBaZi, generateChart } from '../core/astro/bazi.js';
-import { calcDaYun } from '../core/astro/dayun.js';
-import { calcLiuNian } from '../core/astro/liunian.js';
 
-import { analyzeStrength } from '../core/destiny/strengthEngine.js';
-import { analyzeStructure } from '../core/destiny/structureEngine.js';
-import { analyzeClimate } from '../core/destiny/climateEngine.js';
-import { analyzeRelations } from '../core/destiny/relationEngine.js';
-import { analyzeFortune } from '../core/destiny/fortuneEngine.js';
-import { deriveYongShen } from '../core/destiny/yongShenEngine.js';
-
-import { analyzePersonality, renderPersonalityProse } from '../ai/personality.js';
-import { analyzeCareer, renderCareerProse } from '../ai/career.js';
-import { analyzeRelationship, renderRelationshipProse } from '../ai/relationship.js';
-import { analyzeStrategy, renderStrategyProse } from '../ai/strategy.js';
 import {
   buildComprehensivePrompt,
   buildPersonalityPrompt,
@@ -41,7 +27,11 @@ import type { DashboardOptions } from '../visualization/dashboard.js';
 import { renderDashboard } from '../visualization/dashboard.js';
 import { renderChart } from '../visualization/chartRenderer.js';
 
-import type { LLMClient, ChatMessage } from './llmClient.js';
+import type { LLMClient } from './llmClient.js';
+import { buildDestinyContext } from './context.js';
+import { detectTopic } from './router.js';
+import { DeterministicProvider } from './providers/deterministic.js';
+import { LLMProvider } from './providers/llmProvider.js';
 
 // ---- Agent State ----
 
@@ -99,40 +89,22 @@ export interface AgentResponse {
 export class DestinyAgent {
   state: AgentState;
   private llm: LLMClient | null;
+  private deterministic: DeterministicProvider;
+  private llmProvider: LLMProvider | null;
 
   constructor(birth: BirthInfo, llm?: LLMClient) {
     this.llm = llm ?? null;
 
-    const bazi = calcBaZi(birth);
-    const chart = generateChart(birth);
-    const dayun = calcDaYun(birth, bazi.month, bazi.year.stemIndex, bazi.day.stemIndex);
-
-    // Use current year ±5 for LiuNian
-    const currentYear = new Date().getFullYear();
-    const liunian = calcLiuNian(bazi, currentYear, currentYear + 5);
-
-    const climate = analyzeClimate(bazi);
-    const strength = analyzeStrength(bazi, climate);
-    const structure = analyzeStructure(bazi, strength);
-    const relations = analyzeRelations(bazi);
-    const fortune = analyzeFortune(bazi, strength, structure, climate, relations, dayun, liunian);
-    const yongShen = deriveYongShen(bazi, strength, structure, climate);
-
-    const ctx: PromptContext = { chart, strength, structure, climate, relations, fortune, yongShen };
-
-    const personality = analyzePersonality(ctx);
-    const career = analyzeCareer(ctx);
-    const relationship = analyzeRelationship(ctx);
-    const strategy = analyzeStrategy(ctx, personality, career, relationship);
+    const dc = buildDestinyContext(birth);
 
     this.state = {
       birth,
-      chart,
-      ctx,
-      personality,
-      career,
-      relationship,
-      strategy,
+      chart: dc.chart,
+      ctx: dc.ctx,
+      personality: dc.personality,
+      career: dc.career,
+      relationship: dc.relationship,
+      strategy: dc.strategy,
       memory: null,
       history: [],
       session: {
@@ -142,13 +114,20 @@ export class DestinyAgent {
         turnCount: 0,
       },
     };
+
+    this.deterministic = new DeterministicProvider();
+    this.llmProvider = this.llm ? new LLMProvider(this.llm) : null;
   }
 
   // ---- Query Processing ----
 
+  private get providerState() {
+    const { chart, ctx, personality, career, relationship, strategy } = this.state;
+    return { chart, ctx, personality, career, relationship, strategy };
+  }
+
   /**
    * Process a user query and return an agent response.
-   * Routes to the appropriate AI module based on topic detection.
    */
   processQuery(input: string): AgentResponse {
     const topic = detectTopic(input);
@@ -156,22 +135,22 @@ export class DestinyAgent {
     this.state.session.lastActiveAt = new Date().toISOString();
 
     this.state.history.push({
-      role: 'user',
-      content: input,
-      topic,
+      role: 'user', content: input, topic,
       timestamp: new Date().toISOString(),
     });
 
-    const response = this.buildResponse(input, topic);
+    const prompt = this.buildPromptForTopic(input, topic);
+    const response = this.deterministic.respond(topic, this.providerState, this.state.chart, prompt);
+
+    // Attach prompt to deterministic response
+    const result: AgentResponse = { ...response, prompt: prompt ?? undefined };
 
     this.state.history.push({
-      role: 'agent',
-      content: response.text,
-      topic,
+      role: 'agent', content: result.text, topic,
       timestamp: new Date().toISOString(),
     });
 
-    return response;
+    return result;
   }
 
   /**
@@ -179,6 +158,7 @@ export class DestinyAgent {
    */
   setLLM(llm: LLMClient): void {
     this.llm = llm;
+    this.llmProvider = new LLMProvider(llm);
   }
 
   /**
@@ -190,7 +170,6 @@ export class DestinyAgent {
 
   /**
    * Process a query asynchronously with LLM-generated response.
-   * Falls back to deterministic summary if no LLM client is configured.
    */
   async processQueryAsync(input: string): Promise<AgentResponse> {
     const topic = detectTopic(input);
@@ -198,88 +177,34 @@ export class DestinyAgent {
     this.state.session.lastActiveAt = new Date().toISOString();
 
     this.state.history.push({
-      role: 'user',
-      content: input,
-      topic,
+      role: 'user', content: input, topic,
       timestamp: new Date().toISOString(),
     });
 
-    const response = await this.buildResponseAsync(input, topic);
+    const prompt = this.buildPromptForTopic(input, topic);
+
+    // No LLM or no prompt → deterministic fallback
+    if (!this.llmProvider || !prompt) {
+      const fallback = this.deterministic.respond(topic, this.providerState, this.state.chart);
+      const response: AgentResponse = { ...fallback, llmGenerated: false };
+      this.state.history.push({
+        role: 'agent', content: response.text, topic,
+        timestamp: new Date().toISOString(),
+      });
+      return response;
+    }
+
+    const response = await this.llmProvider.respondAsync(
+      topic, this.providerState, this.state.chart,
+      prompt, this.state.history, this.state.memory,
+    );
 
     this.state.history.push({
-      role: 'agent',
-      content: response.text,
-      topic,
+      role: 'agent', content: response.text, topic,
       timestamp: new Date().toISOString(),
     });
 
     return response;
-  }
-
-  /**
-   * Build the LLM message array with conversation history for context.
-   */
-  private buildMessagesWithHistory(prompt: AIPrompt): ChatMessage[] {
-    const messages: ChatMessage[] = [
-      { role: 'system', content: prompt.system },
-    ];
-
-    // Inject memory context
-    if (this.state.memory) {
-      const enriched = buildEnrichedContext(this.state.memory, this.state.ctx);
-      const memoryBlock = formatMemoryForPrompt(enriched);
-      messages.push({
-        role: 'user',
-        content: `[用户历史背景]\n${memoryBlock}`,
-      });
-    }
-
-    // Include recent conversation history for follow-up context
-    const recentHistory = this.state.history.slice(-12); // last 6 turns
-    for (const turn of recentHistory) {
-      messages.push({
-        role: turn.role === 'user' ? 'user' : 'assistant',
-        content: turn.content,
-      });
-    }
-
-    messages.push({ role: 'user', content: prompt.user });
-    return messages;
-  }
-
-  private async buildResponseAsync(
-    input: string,
-    topic: QueryDomain,
-  ): Promise<AgentResponse> {
-    const prompt = this.buildPromptForTopic(input, topic);
-
-    // If no LLM, return deterministic summary
-    if (!this.llm || prompt === null) {
-      return { ...this.buildFallbackResponse(topic), llmGenerated: false };
-    }
-
-    const messages = this.buildMessagesWithHistory(prompt);
-
-    try {
-      const result = await this.llm.chat(messages);
-
-      return {
-        text: result.content,
-        llmGenerated: true,
-        prompt: prompt ?? undefined,
-        topic,
-        usage: result.usage,
-      };
-    } catch (err) {
-      // Fallback on LLM error
-      const fallback = this.buildFallbackResponse(topic);
-      return {
-        ...fallback,
-        text: `[LLM调用失败: ${err instanceof Error ? err.message : '未知错误'}]\n\n${fallback.text}`,
-        llmGenerated: false,
-        prompt,
-      };
-    }
   }
 
   /**
@@ -295,180 +220,89 @@ export class DestinyAgent {
     const topic = detectTopic(input);
     const prompt = this.buildPromptForTopic(input, topic);
 
-    // Track session
     this.state.session.turnCount++;
     this.state.session.lastActiveAt = new Date().toISOString();
     this.state.history.push({
-      role: 'user', content: input, topic, timestamp: new Date().toISOString(),
+      role: 'user', content: input, topic,
+      timestamp: new Date().toISOString(),
     });
 
-    if (!this.llm || !prompt) {
-      const fallback = this.buildFallbackResponse(topic);
+    // No LLM → fallback to deterministic single yield
+    if (!this.llmProvider || !prompt) {
+      const fallback = this.deterministic.respond(topic, this.providerState, this.state.chart);
       this.state.history.push({
-        role: 'agent', content: fallback.text, topic, timestamp: new Date().toISOString(),
+        role: 'agent', content: fallback.text, topic,
+        timestamp: new Date().toISOString(),
       });
       yield { type: 'token', content: fallback.text };
       yield { type: 'done', topic, prompt: prompt ?? undefined };
       return;
     }
 
-    const messages = this.buildMessagesWithHistory(prompt);
     let fullText = '';
 
-    for await (const event of this.llm.stream(messages)) {
+    for await (const event of this.llmProvider.respondStream(
+      topic, this.providerState, this.state.chart,
+      prompt, this.state.history, this.state.memory,
+    )) {
       if (event.type === 'token' && event.content) {
         fullText += event.content;
         yield { type: 'token', content: event.content };
       } else if (event.type === 'error') {
         this.state.history.push({
-          role: 'agent', content: fullText || event.error || 'Stream error', topic, timestamp: new Date().toISOString(),
+          role: 'agent', content: fullText || event.error || 'Stream error', topic,
+          timestamp: new Date().toISOString(),
         });
         yield { type: 'error', error: event.error };
-        yield { type: 'done', topic, prompt: prompt ?? undefined };
+        yield { type: 'done', topic, prompt };
         return;
       } else if (event.type === 'done') {
         this.state.history.push({
-          role: 'agent', content: fullText, topic, timestamp: new Date().toISOString(),
+          role: 'agent', content: fullText, topic,
+          timestamp: new Date().toISOString(),
         });
-        yield { type: 'done', topic, prompt: prompt ?? undefined };
+        yield { type: 'done', topic, prompt };
         return;
       }
     }
 
+    // Fallthrough: stream ended without done/error event
     this.state.history.push({
-      role: 'agent', content: fullText, topic, timestamp: new Date().toISOString(),
+      role: 'agent', content: fullText, topic,
+      timestamp: new Date().toISOString(),
     });
-    yield { type: 'done', topic, prompt: prompt ?? undefined };
+    yield { type: 'done', topic, prompt };
   }
 
   /**
    * Build the appropriate AI prompt for a given topic.
    */
-  private buildPromptForTopic(
-    input: string,
-    topic: QueryDomain,
-  ): AIPrompt | null {
+  private buildPromptForTopic(input: string, topic: QueryDomain): AIPrompt | null {
     const { ctx } = this.state;
 
     switch (topic) {
-      case '性格':
-        return buildPersonalityPrompt(ctx);
-      case '事业':
-        return buildCareerPrompt(ctx);
-      case '感情':
-        return buildRelationshipPrompt(ctx);
-      case '运势':
-        return buildYearlyFortunePrompt(ctx, new Date().getFullYear());
-      case '战略':
-        return buildStrategyPrompt(ctx, input);
-      case '综合':
-        return buildComprehensivePrompt(ctx);
-      case '排盘':
-        return null; // No LLM needed for chart display
+      case '性格':   return buildPersonalityPrompt(ctx);
+      case '事业':   return buildCareerPrompt(ctx);
+      case '感情':   return buildRelationshipPrompt(ctx);
+      case '运势':   return buildYearlyFortunePrompt(ctx, new Date().getFullYear());
+      case '战略':   return buildStrategyPrompt(ctx, input);
+      case '综合':   return buildComprehensivePrompt(ctx);
+      case '排盘':   return null;
     }
-  }
-
-  /**
-   * Fallback deterministic response when no LLM is available.
-   */
-  private buildFallbackResponse(topic: QueryDomain): AgentResponse {
-    const { ctx, personality, career, relationship, strategy } = this.state;
-
-    switch (topic) {
-      case '性格':
-        return {
-          text: renderPersonalityProse(personality, ctx),
-          topic,
-          llmGenerated: false,
-        };
-      case '事业':
-        return {
-          text: renderCareerProse(career, ctx),
-          topic,
-          llmGenerated: false,
-        };
-      case '感情':
-        return {
-          text: renderRelationshipProse(relationship, ctx),
-          topic,
-          llmGenerated: false,
-        };
-      case '运势': {
-        const f = ctx.fortune;
-        const yearlyText = f.yearlyAnalysis.slice(0, 3).map(y =>
-          `${y.year}年：事业${y.career}分 财富${y.wealth}分 感情${y.relationship}分 健康${y.health}分`
-        ).join('\n');
-        return {
-          text: `流年运势分析\n\n当前运势处于${f.overall.level}期，综合评分${f.overall.score}/100。${f.overall.levelLabel}\n\n最佳领域：${f.overall.bestDimension}，需关注：${f.overall.riskDimension}\n\n${f.summary}\n\n近年流年得分：\n${yearlyText}\n\n${f.keyYears.best ? `最佳年份：${f.keyYears.best.year}年` : ''}${f.keyYears.worst ? `，需注意年份：${f.keyYears.worst.year}年` : ''}。`,
-          topic,
-          llmGenerated: false,
-        };
-      }
-      case '战略':
-        return {
-          text: renderStrategyProse(strategy, ctx),
-          topic,
-          llmGenerated: false,
-        };
-      case '排盘': {
-        const viz = renderChart(this.state.chart);
-        return {
-          text: `命盘排盘完成。日主${this.state.chart.dayMaster.name}${this.state.chart.dayMasterWuxing}。`,
-          visualization: viz,
-          topic,
-          llmGenerated: false,
-        };
-      }
-      case '综合':
-      default: {
-        const viz = renderDashboard(
-          ctx.chart, ctx.strength, ctx.structure,
-          ctx.climate, ctx.relations, ctx.fortune,
-          { compact: true },
-        );
-        const parts = [
-          renderPersonalityProse(personality, ctx),
-          renderCareerProse(career, ctx),
-          renderRelationshipProse(relationship, ctx),
-          renderStrategyProse(strategy, ctx),
-        ];
-        return {
-          text: parts.join('\n\n---\n\n'),
-          visualization: viz,
-          topic,
-          llmGenerated: false,
-        };
-      }
-    }
-  }
-
-  private buildResponse(input: string, topic: QueryDomain): AgentResponse {
-    const prompt = this.buildPromptForTopic(input, topic);
-    const fallback = this.buildFallbackResponse(topic);
-    return { ...fallback, prompt: prompt ?? undefined };
   }
 
   // ---- Memory Integration ----
 
-  /**
-   * Enable memory tracking by loading or creating a memory store.
-   */
   enableMemory(userId?: string): MemoryStore {
     const id = userId ?? `user_${this.state.birth.year}${this.state.birth.month}${this.state.birth.day}`;
     this.state.memory = new MemoryStore(id, this.state.birth);
     return this.state.memory;
   }
 
-  /**
-   * Load an existing memory store from JSON.
-   */
   loadMemory(json: string): void {
     this.state.memory = MemoryStore.fromJSON(json);
   }
 
-  /**
-   * Log current year predictions into memory.
-   */
   logPredictions(): void {
     if (!this.state.memory) this.enableMemory();
     const year = new Date().getFullYear();
@@ -476,9 +310,6 @@ export class DestinyAgent {
     logYearlyPredictions(this.state.memory!, year, yearlyFortune);
   }
 
-  /**
-   * Build a memory-enriched response with personal history context.
-   */
   processQueryWithMemory(input: string): AgentResponse {
     if (!this.state.memory) this.enableMemory();
 
@@ -491,9 +322,6 @@ export class DestinyAgent {
 
   // ---- Dashboard ----
 
-  /**
-   * Render the full destiny dashboard.
-   */
   renderDashboard(options?: DashboardOptions): string {
     const { ctx } = this.state;
     return renderDashboard(
@@ -503,18 +331,12 @@ export class DestinyAgent {
     );
   }
 
-  /**
-   * Render just the four pillars chart.
-   */
   renderChart(): string {
     return renderChart(this.state.chart);
   }
 
   // ---- Session ----
 
-  /**
-   * Get conversation history summary.
-   */
   getSessionSummary(): string {
     const { session, history } = this.state;
     const topics = history
@@ -530,25 +352,3 @@ export class DestinyAgent {
   }
 }
 
-// ---- Topic Detection ----
-
-const TOPIC_KEYWORDS: [QueryDomain, string[]][] = [
-  ['性格', ['性格', '个性', '特点', '是什么样的人', 'mbti', '五行', '特质']],
-  ['事业', ['事业', '工作', '职业', '行业', '创业', '跳槽', '升职', '求职']],
-  ['感情', ['感情', '爱情', '婚姻', '恋爱', '对象', '桃花', '配偶', '脱单']],
-  ['运势', ['运势', '流年', '今年', '明年', '运气', '财运', '健康运', '走势']],
-  ['战略', ['战略', '方向', '选择', '建议', '决策', '计划', '规划', '发展']],
-  ['排盘', ['排盘', '八字', '四柱', '命盘', '盘面', '显示', '查看']],
-];
-
-function detectTopic(input: string): QueryDomain {
-  const lower = input.toLowerCase();
-
-  for (const [domain, keywords] of TOPIC_KEYWORDS) {
-    for (const kw of keywords) {
-      if (lower.includes(kw)) return domain;
-    }
-  }
-
-  return '综合';
-}
