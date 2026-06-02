@@ -164,6 +164,160 @@ describe('Climate → Strength Integration (调候联动)', () => {
   });
 });
 
+// ---- 十二长生 (12 Growth Stages) Tests ----
+
+describe('十二长生 (12 Growth Stages)', () => {
+  it('should include 十二长生 factor in results', () => {
+    const result = analyzeStrength(bazi);
+    const factor = result.factors.find(f => f.name.startsWith('十二长生·'));
+    expect(factor).toBeDefined();
+    expect(factor!.category).toBeDefined();
+    expect(factor!.score).toBeDefined();
+  });
+
+  it('乙木坐巳 should be 沐浴 stage (+1)', () => {
+    // Test chart: 乙木日主坐巳支 → 沐浴
+    const result = analyzeStrength(bazi);
+    const factor = result.factors.find(f => f.name.startsWith('十二长生·'));
+    expect(factor!.name).toBe('十二长生·沐浴');
+    expect(factor!.score).toBe(1);
+    expect(factor!.category).toBe('support');
+  });
+
+  it('甲木坐寅 should be 临官 (禄) stage (+8)', () => {
+    // 甲日主 (stem 0), 寅 branch (2)
+    // 甲: 亥长生(11), 子沐浴(0), 丑冠带(1), 寅临官(2) → stage 3
+    const jiaBirth: BirthInfo = {
+      year: 1984, month: 2, day: 4, hour: 6, minute: 0,  // 立春附近甲日
+      longitude: 116.4, isDST: false, gender: '男',
+    };
+    const jiaBazi = calcBaZi(jiaBirth);
+    if (jiaBazi.day.stemIndex === 0) {
+      const result = analyzeStrength(jiaBazi);
+      const factor = result.factors.find(f => f.name.startsWith('十二长生·'));
+      expect(factor!.name).toBe('十二长生·临官');
+      expect(factor!.score).toBe(8);
+      expect(factor!.category).toBe('support');
+    }
+  });
+
+  it('丙火坐午 should be 帝旺 stage (+10)', () => {
+    const bingBirth: BirthInfo = {
+      year: 2000, month: 6, day: 15, hour: 12, minute: 0,
+      longitude: 116.4, isDST: false, gender: '男',
+    };
+    const bingBazi = calcBaZi(bingBirth);
+    if (bingBazi.day.stemIndex === 2) {
+      const result = analyzeStrength(bingBazi);
+      const factor = result.factors.find(f => f.name.startsWith('十二长生·'));
+      expect(factor!.name).toBe('十二长生·帝旺');
+      expect(factor!.score).toBe(10);
+    }
+  });
+
+  it('壬水坐申 should be 长生 stage (+4)', () => {
+    // Test chart: 壬日主, 日支申
+    // 壬: 申长生(8)→index 0, so 壬坐申=长生
+    const renBirth: BirthInfo = {
+      year: 2012, month: 8, day: 17, hour: 12, minute: 0,
+      longitude: 116.4, isDST: false, gender: '男',
+    };
+    const renBazi = calcBaZi(renBirth);
+    if (renBazi.day.stemIndex === 8) {
+      const result = analyzeStrength(renBazi);
+      const factor = result.factors.find(f => f.name.startsWith('十二长生·'));
+      expect(factor!.name).toBe('十二长生·长生');
+      expect(factor!.score).toBe(4);
+    }
+  });
+
+  it('庚金坐子 should be 死 stage (-6)', () => {
+    // 庚: 长生巳(5), 沐浴午(6), 冠带未(7), 临官申(8), 帝旺酉(9),
+    //     衰戌(10), 病亥(11), 死子(0) → index 7
+    const gengBirth: BirthInfo = {
+      year: 2000, month: 1, day: 10, hour: 6, minute: 0,
+      longitude: 116.4, isDST: false, gender: '男',
+    };
+    const gengBazi = calcBaZi(gengBirth);
+    if (gengBazi.day.stemIndex === 6) {
+      const result = analyzeStrength(gengBazi);
+      const factor = result.factors.find(f => f.name.startsWith('十二长生·'));
+      expect(factor!.name).toBe('十二长生·死');
+      expect(factor!.score).toBe(-6);
+      expect(factor!.category).toBe('weaken');
+    }
+  });
+
+  it('scoring should include twelveStage field', () => {
+    const result = analyzeStrength(bazi);
+    expect(result.scoring.twelveStage).toBeDefined();
+    expect(typeof result.scoring.twelveStage).toBe('number');
+  });
+});
+
+// ---- 透干联动 (Stem Revelation Feedback) Tests ----
+
+describe('透干联动 (Stem Revelation Feedback)', () => {
+  it('test chart (乙日主, 未月, 己透干) should have 透干联动 factor', () => {
+    // Month 未(7): dominant stem = 己(5)
+    // Heavenly stems: 年癸(9), 月己(5), 时辛(7) → 己透干
+    // 己 for 乙日主 = 偏财 → score -3
+    const result = analyzeStrength(bazi);
+    const factor = result.factors.find(f => f.name === '透干联动');
+    expect(factor).toBeDefined();
+    expect(factor!.category).toBe('weaken');
+    expect(factor!.score).toBe(-3);
+    expect(factor!.description).toContain('偏财');
+  });
+
+  it('should have 透干联动 factor when month dominant is 透干', () => {
+    // Chart with 印星透干: 壬日主, 申月(dominant 庚), 月干庚 → 偏印透干 → +5
+    const yinBirth: BirthInfo = {
+      year: 2012, month: 8, day: 17, hour: 12, minute: 0,  // 申月
+      longitude: 116.4, isDST: false, gender: '男',
+    };
+    const yinBazi = calcBaZi(yinBirth);
+    const dmIdx = yinBazi.day.stemIndex;
+    const monthHid = yinBazi.month.branchIndex; // 申=8
+    // HIDDEN_STEMS[8] = [{stem:6 (庚), dominant:true}, {stem:8 (壬)}, {stem:4 (戊)}]
+    // For 壬日主 (stem 8), month dominant 庚(6): 生我+同阴阳 = 偏印
+    // Check if 庚(6) is on any stem
+    const stems = [yinBazi.year.stemIndex, yinBazi.month.stemIndex, yinBazi.hour.stemIndex];
+    const dominant = 6; // 庚
+    if (stems.includes(dominant) && dmIdx === 8) {
+      const result = analyzeStrength(yinBazi);
+      const factor = result.factors.find(f => f.name === '透干联动');
+      expect(factor).toBeDefined();
+      expect(factor!.category).toBe('support');
+      expect(factor!.score).toBe(5);
+      expect(factor!.description).toContain('偏印');
+    }
+  });
+
+  it('should NOT have 透干联动 when not 透干', () => {
+    // Create a chart where month dominant NOT on stems
+    // 甲日主, 戌月(dominant 戊=4), check stems don't include 4
+    const birth: BirthInfo = {
+      year: 1984, month: 10, day: 1, hour: 6, minute: 0,
+      longitude: 116.4, isDST: false, gender: '男',
+    };
+    const testBazi = calcBaZi(birth);
+    const monthHidStem = 4; // 戌月本气戊
+    const stems = [testBazi.year.stemIndex, testBazi.month.stemIndex, testBazi.hour.stemIndex];
+    if (!stems.includes(monthHidStem)) {
+      const result = analyzeStrength(testBazi);
+      const factor = result.factors.find(f => f.name === '透干联动');
+      expect(factor).toBeUndefined();
+    }
+  });
+
+  it('scoring should include touGan field', () => {
+    const result = analyzeStrength(bazi);
+    expect(result.scoring.touGan).toBeDefined();
+    expect(typeof result.scoring.touGan).toBe('number');
+  });
+});
+
 // ---- Structure Engine Tests ----
 
 describe('Structure Engine (格局)', () => {

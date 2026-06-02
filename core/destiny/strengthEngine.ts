@@ -4,8 +4,8 @@
 // stem/branch support, weakening, and earthly branch interactions.
 // ============================================================
 
-import type { BaZi, EarthlyBranchIndex, Wuxing } from '../astro/types.js';
-import { ALL_STEMS, HIDDEN_STEMS } from '../astro/constants.js';
+import type { BaZi, EarthlyBranchIndex, HeavenlyStemIndex, Wuxing } from '../astro/types.js';
+import { ALL_STEMS, HIDDEN_STEMS, getShiShen } from '../astro/constants.js';
 import { isClash, isCombination, COMBINATION_WUXING, getPunishment, isHarm } from '../astro/earthlyBranchRelations.js';
 import type { ClimateResult } from './climateEngine.js';
 
@@ -40,10 +40,14 @@ export interface StrengthResult {
   scoring: {
     base: number;
     monthOrder: number;
+    seasonalState: number;
+    twelveStage: number;
+    touGan: number;
     roots: number;
     stemSupport: number;
     branchSupport: number;
     weakening: number;
+    climateAdjustment: number;
     total: number;
   };
   summary: string;
@@ -108,6 +112,79 @@ function getSeasonalState(
   return { state: '死', modifier: -8, description: `日主${dm}被当令${ruler}所克，季节最弱` };
 }
 
+// ---- 十二长生 (12 Growth Stages) ----
+
+/**
+ * 十二长生分支索引表.
+ * For each heavenly stem (0-9), an array of 12 earthly branch indices
+ * representing stages 0-11: 长生→沐浴→冠带→临官→帝旺→衰→病→死→墓→绝→胎→养.
+ *
+ * Yang stems (甲丙戊庚壬) go forward (clockwise).
+ * Yin stems (乙丁己辛癸) go backward (counter-clockwise).
+ *
+ * 戊随丙, 己随丁.
+ */
+const TWELVE_STAGE_BRANCHES: Record<HeavenlyStemIndex, EarthlyBranchIndex[]> = {
+  // 甲: 亥子丑寅卯辰巳午未申酉戌 → 长生沐浴冠带临官帝旺衰病死墓绝胎养
+  0: [11, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+  // 乙: 午巳辰卯寅丑子亥戌酉申未 → (reverse order)
+  1: [6, 5, 4, 3, 2, 1, 0, 11, 10, 9, 8, 7],
+  // 丙: 寅卯辰巳午未申酉戌亥子丑
+  2: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 1],
+  // 丁: 酉申未午巳辰卯寅丑子亥戌
+  3: [9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 11, 10],
+  // 戊: 同丙 (寅卯辰巳午未申酉戌亥子丑)
+  4: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 1],
+  // 己: 同丁 (酉申未午巳辰卯寅丑子亥戌)
+  5: [9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 11, 10],
+  // 庚: 巳午未申酉戌亥子丑寅卯辰
+  6: [5, 6, 7, 8, 9, 10, 11, 0, 1, 2, 3, 4],
+  // 辛: 子亥戌酉申未午巳辰卯寅丑
+  7: [0, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
+  // 壬: 申酉戌亥子丑寅卯辰巳午未
+  8: [8, 9, 10, 11, 0, 1, 2, 3, 4, 5, 6, 7],
+  // 癸: 卯寅丑子亥戌酉申未午巳辰
+  9: [3, 2, 1, 0, 11, 10, 9, 8, 7, 6, 5, 4],
+};
+
+const STAGE_NAMES = ['长生', '沐浴', '冠带', '临官', '帝旺', '衰', '病', '死', '墓', '绝', '胎', '养'] as const;
+
+/** Score for each of the 12 stages. 临官/帝旺 strongest, 绝 weakest. */
+const STAGE_SCORES: Record<number, number> = {
+  0: 4,   // 长生 — new growth
+  1: 1,   // 沐浴 — unstable
+  2: 4,   // 冠带 — maturing
+  3: 8,   // 临官 — prosperity (禄)
+  4: 10,  // 帝旺 — peak (旺)
+  5: 0,   // 衰 — decline
+  6: -4,  // 病 — sickness
+  7: -6,  // 死 — death
+  8: -6,  // 墓 — tomb
+  9: -8,  // 绝 — extinction
+  10: -2, // 胎 — conception
+  11: -2, // 养 — nurturing
+};
+
+function getTwelveStageIndex(stem: HeavenlyStemIndex, branch: EarthlyBranchIndex): number {
+  return TWELVE_STAGE_BRANCHES[stem].indexOf(branch);
+}
+
+/** Analyze day stem's 十二长生 state on the day branch (日干坐日支). */
+function analyzeTwelveStages(bazi: BaZi): StrengthFactor {
+  const dm = bazi.day.stemIndex;
+  const dayBranch = bazi.day.branchIndex;
+  const stageIdx = getTwelveStageIndex(dm, dayBranch);
+  const stageName = STAGE_NAMES[stageIdx]!;
+  const score = STAGE_SCORES[stageIdx]!;
+
+  return {
+    name: `十二长生·${stageName}`,
+    category: score >= 0 ? 'support' : 'weaken',
+    score,
+    description: `日主${ALL_STEMS[dm]!.name}坐${bazi.day.branch.name}为${stageName}之地`,
+  };
+}
+
 // ---- Constants ----
 
 const LEVEL_LABELS: Record<StrengthLevel, string> = {
@@ -137,8 +214,14 @@ export function analyzeStrength(bazi: BaZi, climate?: ClimateResult): StrengthRe
   // 刑冲合害 interaction factors
   const interactions = analyzeInteractions(bazi, dmWx);
 
+  // 十二长生: day stem sitting on day branch
+  const twelveStage = analyzeTwelveStages(bazi);
+
   // Climate adjustment (调候联动)
   const climateFactor = climate ? buildClimateFactor(climate, bazi) : null;
+
+  // 透干联动: month dominant stem appearing on heavenly stem
+  const touGanFactor = buildTouGanFactor(bazi);
 
   // Assemble all factors into a flat array
   const factors: StrengthFactor[] = [
@@ -150,6 +233,7 @@ export function analyzeStrength(bazi: BaZi, climate?: ClimateResult): StrengthRe
       score: seasonal.modifier,
       description: seasonal.description,
     },
+    twelveStage,
     ...roots.map(r => ({
       name: `通根·${r.pillar}`,
       category: 'support' as const,
@@ -170,6 +254,7 @@ export function analyzeStrength(bazi: BaZi, climate?: ClimateResult): StrengthRe
       description: `${w.pillar}${w.stem}${w.reason}`,
     })),
     ...(climateFactor ? [climateFactor] : []),
+    ...(touGanFactor ? [touGanFactor] : []),
     ...interactions,
   ];
 
@@ -185,6 +270,8 @@ export function analyzeStrength(bazi: BaZi, climate?: ClimateResult): StrengthRe
     stemSupport: stemSupport.reduce((s, r) => s + r.score, 0),
     branchSupport: branchSupport.score,
     weakening: weakening.reduce((s, w) => s + w.score, 0),
+    twelveStage: twelveStage.score,
+    touGan: touGanFactor?.score ?? 0,
     climateAdjustment: climateFactor?.score ?? 0,
     total: clampedScore,
   };
@@ -248,6 +335,74 @@ function checkWuxingPresence(bazi: BaZi, wx: string | null): boolean {
   if (!wx) return false;
   const pillars = [bazi.year, bazi.month, bazi.day, bazi.hour];
   return pillars.some(p => p.stem.wuxing === wx || p.branch.wuxing === wx);
+}
+
+// ---- 透干联动 (Stem Revelation Feedback) ----
+
+/**
+ * If the month branch's dominant hidden stem appears on a heavenly stem (透干),
+ * the 十神 it represents amplifies its influence on the day master's strength.
+ *
+ * 印/比 → supports day master (+3 to +5)
+ * 食伤/财/官杀 → drains or controls day master (-3 to -6)
+ */
+function buildTouGanFactor(bazi: BaZi): StrengthFactor | null {
+  const monthHidden = HIDDEN_STEMS[bazi.month.branchIndex];
+  if (!monthHidden || monthHidden.length === 0) return null;
+
+  const dominantStem = monthHidden[0]!.stem as HeavenlyStemIndex;
+  const stems: HeavenlyStemIndex[] = [
+    bazi.year.stemIndex,
+    bazi.month.stemIndex,
+    bazi.hour.stemIndex,
+  ];
+  const isTouGan = stems.includes(dominantStem);
+
+  if (!isTouGan) return null;
+
+  const dm = bazi.day.stemIndex;
+  const shiShen = getShiShen(dm, dominantStem);
+  const stemName = ALL_STEMS[dominantStem]!.name;
+
+  let score: number;
+  let description: string;
+
+  switch (shiShen) {
+    case '正印':
+    case '偏印':
+      score = 5;
+      description = `月令${stemName}(${shiShen})透干，印星生扶日主`;
+      break;
+    case '比肩':
+    case '劫财':
+      score = 3;
+      description = `月令${stemName}(${shiShen})透干，比劫助身`;
+      break;
+    case '食神':
+    case '伤官':
+      score = -4;
+      description = `月令${stemName}(${shiShen})透干，食伤泄气`;
+      break;
+    case '正财':
+    case '偏财':
+      score = -3;
+      description = `月令${stemName}(${shiShen})透干，财星耗身`;
+      break;
+    case '正官':
+    case '七杀':
+      score = -6;
+      description = `月令${stemName}(${shiShen})透干，官杀克身`;
+      break;
+    default:
+      return null;
+  }
+
+  return {
+    name: '透干联动',
+    category: score >= 0 ? 'support' : 'weaken',
+    score,
+    description,
+  };
 }
 
 // ---- 刑冲合害 Analysis ----
