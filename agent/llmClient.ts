@@ -331,18 +331,29 @@ export class LLMClient {
       .map(m => {
         const msg: Record<string, unknown> = { role: m.role };
         if (m.role === 'tool') {
-          // Anthropic uses user messages with tool_result content blocks
+          // Anthropic requires a user message with tool_result content blocks
           msg.role = 'user';
-          // content is a string from our tool result
-          msg.content = m.content ?? '';
+          msg.content = [{
+            type: 'tool_result',
+            tool_use_id: m.tool_call_id ?? '',
+            content: m.content ?? '',
+          }];
         } else if (m.role === 'assistant' && m.tool_calls) {
-          // Convert assistant tool_calls to Anthropic tool_use content blocks
-          msg.content = m.tool_calls.map(tc => ({
-            type: 'tool_use',
-            id: tc.id,
-            name: tc.function.name,
-            input: safeParseJSON(tc.function.arguments) ?? {},
-          }));
+          // Convert assistant tool_calls to Anthropic content blocks.
+          // Include any text content as a text block first, then tool_use blocks.
+          const blocks: Record<string, unknown>[] = [];
+          if (m.content) {
+            blocks.push({ type: 'text', text: m.content });
+          }
+          for (const tc of m.tool_calls) {
+            blocks.push({
+              type: 'tool_use',
+              id: tc.id,
+              name: tc.function.name,
+              input: safeParseJSON(tc.function.arguments) ?? {},
+            });
+          }
+          msg.content = blocks;
         } else {
           msg.content = m.content ?? '';
         }
@@ -353,10 +364,7 @@ export class LLMClient {
   }
 
   private async *streamAnthropic(messages: ChatMessage[]): AsyncGenerator<LLMStreamEvent> {
-    const systemMsg = messages.find(m => m.role === 'system');
-    const chatMessages = messages
-      .filter(m => m.role !== 'system')
-      .map(m => ({ role: m.role, content: m.content ?? '' }));
+    const { systemMsg, chatMsgs: chatMessages } = this.splitAnthropicMessages(messages);
 
     const body: Record<string, unknown> = {
       model: this.config.model,
