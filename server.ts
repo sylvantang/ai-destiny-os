@@ -275,7 +275,7 @@ async function handleAsk(req: IncomingMessage, res: ServerResponse): Promise<voi
     type: 'done',
     topic: finalTopic || undefined,
     sessionId: sessionId ?? undefined,
-    fallback: !fullText.trim() || timedOut ? true : undefined,
+    fallback: !fullText.trim() ? true : undefined,
   })}\n\n`);
   res.end();
 

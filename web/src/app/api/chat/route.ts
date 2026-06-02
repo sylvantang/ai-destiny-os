@@ -102,7 +102,7 @@ export async function POST(request: Request) {
           type: 'done',
           topic: finalTopic || undefined,
           sessionId,
-          fallback: timedOut ? true : undefined,
+          fallback: !fullText.trim() ? true : undefined,
         });
       } catch (err) {
         send({
