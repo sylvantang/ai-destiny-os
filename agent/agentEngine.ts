@@ -316,7 +316,17 @@ export class DestinyAgent {
 
   enableMemory(userId?: string): MemoryStore {
     const id = userId ?? `user_${this.state.birth.year}${this.state.birth.month}${this.state.birth.day}`;
+
+    // Try loading existing memory from SQLite
+    const existing = MemoryStore.load(id);
+    if (existing) {
+      this.state.memory = existing;
+      return existing;
+    }
+
+    // Create fresh and enable persistence
     this.state.memory = new MemoryStore(id, this.state.birth);
+    this.state.memory.enablePersistence();
     return this.state.memory;
   }
 

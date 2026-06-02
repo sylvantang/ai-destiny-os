@@ -11,7 +11,7 @@ import { DestinyAgent } from './agent/agentEngine.js';
 import { createAutoClient } from './agent/llmClient.js';
 import { ALL_STEMS, SEXAGENARY_NAMES } from './core/astro/constants.js';
 import type { BirthInfo } from './core/astro/types.js';
-import { saveRecord, listRecords, getRecord, deleteRecord, saveAnalysis, getHistory } from './data/database.js';
+import { saveRecord, listRecords, getRecord, deleteRecord, saveAnalysis, getHistory, createSession, getSession, listSessions, deleteSession, addSessionTurn, getSessionTurns } from './data/database.js';
 import { buildChartPayload } from './ai/chartPayload.js';
 import { buildReportHTML } from './ai/reportHTML.js';
 
@@ -182,6 +182,7 @@ async function handleAsk(req: IncomingMessage, res: ServerResponse): Promise<voi
 
   const question = String(body['question'] ?? '请分析我的命盘');
   const recordId = Number(body['recordId']) || 0;
+  const sessionId = typeof body['sessionId'] === 'string' ? body['sessionId'] : null;
 
   if (!llm) {
     // No LLM — return deterministic fallback as SSE
@@ -195,9 +196,16 @@ async function handleAsk(req: IncomingMessage, res: ServerResponse): Promise<voi
     });
     res.write(`data: ${JSON.stringify({ type: 'chart', ...buildChartPayload(agent) })}\n\n`);
     res.write(`data: ${JSON.stringify({ type: 'token', content: response.text })}\n\n`);
-    res.write(`data: ${JSON.stringify({ type: 'done', topic: response.topic })}\n\n`);
+    res.write(`data: ${JSON.stringify({ type: 'done', topic: response.topic, sessionId: sessionId ?? undefined })}\n\n`);
     res.end();
 
+    // Persist conversation turn if sessionId provided
+    if (sessionId) {
+      try {
+        addSessionTurn(sessionId, 'user', question, response.topic);
+        addSessionTurn(sessionId, 'agent', response.text, response.topic);
+      } catch { /* best-effort */ }
+    }
     if (recordId) {
       try { saveAnalysis(recordId, question, response.text, response.topic); } catch { /* best-effort */ }
     }
@@ -218,6 +226,11 @@ async function handleAsk(req: IncomingMessage, res: ServerResponse): Promise<voi
   let fullText = '';
   let finalTopic = '';
 
+  // Save user turn if sessionId provided
+  if (sessionId) {
+    try { addSessionTurn(sessionId, 'user', question); } catch { /* best-effort */ }
+  }
+
   try {
     for await (const event of agent.processQueryStream(question)) {
       if (event.type === 'token' && event.content) {
@@ -225,7 +238,7 @@ async function handleAsk(req: IncomingMessage, res: ServerResponse): Promise<voi
         res.write(`data: ${JSON.stringify({ type: 'token', content: event.content })}\n\n`);
       } else if (event.type === 'done') {
         finalTopic = event.topic ?? '';
-        res.write(`data: ${JSON.stringify({ type: 'done', topic: event.topic })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: 'done', topic: event.topic, sessionId: sessionId ?? undefined })}\n\n`);
       } else if (event.type === 'error') {
         res.write(`data: ${JSON.stringify({ type: 'error', error: event.error })}\n\n`);
       }
@@ -236,6 +249,10 @@ async function handleAsk(req: IncomingMessage, res: ServerResponse): Promise<voi
 
   res.end();
 
+  // Persist agent turn if sessionId provided
+  if (sessionId && fullText) {
+    try { addSessionTurn(sessionId, 'agent', fullText, finalTopic || undefined); } catch { /* best-effort */ }
+  }
   if (recordId && fullText) {
     try { saveAnalysis(recordId, question, fullText, finalTopic); } catch { /* best-effort */ }
   }
@@ -321,6 +338,77 @@ async function handleReport(req: IncomingMessage, res: ServerResponse): Promise<
   }
 }
 
+// ---- Session Management ----
+
+async function handleCreateSession(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const raw = await parseBody(req);
+  let body: Record<string, unknown>;
+  try { body = JSON.parse(raw); } catch { return json(res, { error: 'Invalid JSON' }, 400); }
+
+  const birth = parseBirth(body);
+  if (!birth) return json(res, { error: 'Missing year/month/day' }, 400);
+
+  const sessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const userId = String(body['userId'] ?? `user_${birth.year}${birth.month}${birth.day}`);
+
+  try {
+    const session = createSession(sessionId, userId, birth);
+    json(res, { sessionId: session.id, userId: session.userId, createdAt: session.createdAt }, 201);
+  } catch (err) {
+    json(res, { error: 'Failed to create session' }, 500);
+  }
+}
+
+function handleListSessions(_req: IncomingMessage, res: ServerResponse): void {
+  try {
+    const sessions = listSessions();
+    json(res, sessions.map(s => ({
+      id: s.id,
+      userId: s.userId,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+    })));
+  } catch {
+    json(res, { error: 'Failed to list sessions' }, 500);
+  }
+}
+
+function handleGetSession(_req: IncomingMessage, res: ServerResponse, sessionId: string): void {
+  try {
+    const session = getSession(sessionId);
+    if (!session) return json(res, { error: 'Session not found' }, 404);
+
+    const turns = getSessionTurns(sessionId);
+    json(res, {
+      id: session.id,
+      userId: session.userId,
+      birthInfo: JSON.parse(session.birthInfo),
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
+      turns: turns.map(t => ({
+        id: t.id,
+        role: t.role,
+        content: t.content,
+        topic: t.topic,
+        timestamp: t.timestamp,
+      })),
+    });
+  } catch {
+    json(res, { error: 'Failed to get session' }, 500);
+  }
+}
+
+function handleDeleteSession(_req: IncomingMessage, res: ServerResponse, sessionId: string): void {
+  try {
+    const session = getSession(sessionId);
+    if (!session) return json(res, { error: 'Session not found' }, 404);
+    deleteSession(sessionId);
+    json(res, { ok: true });
+  } catch {
+    json(res, { error: 'Failed to delete session' }, 500);
+  }
+}
+
 // ---- Router ----
 
 async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -340,7 +428,16 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 
   if (method === 'POST' && url === '/api/chart') return handleChart(req, res);
   if (method === 'POST' && url === '/api/ask') return handleAsk(req, res);
+  if (method === 'POST' && url === '/api/sessions') return handleCreateSession(req, res);
+  if (method === 'GET' && url === '/api/sessions') return handleListSessions(req, res);
   if ((method === 'GET' || method === 'POST') && url.startsWith('/api/report')) return handleReport(req, res);
+
+  // Session routes
+  const sessionMatch = url.match(/^\/api\/sessions\/([a-zA-Z0-9_]+)$/);
+  if (sessionMatch && method === 'GET')
+    return handleGetSession(req, res, sessionMatch[1]!);
+  if (sessionMatch && method === 'DELETE')
+    return handleDeleteSession(req, res, sessionMatch[1]!);
 
   // Record management
   const recordMatch = url.match(/^\/api\/records\/(\d+)$/);

@@ -1,6 +1,7 @@
 // ============================================================
 // AI Destiny OS — Memory Layer: Storage Engine
-// JSON file persistence with in-memory caching.
+// In-memory snapshot with optional SQLite persistence.
+// Call enablePersistence() to auto-load/save from the database.
 // ============================================================
 
 import type {
@@ -10,6 +11,7 @@ import type {
 import type { DestinyChart } from '../core/astro/types.js';
 import type { StrengthResult, StructureResult, ClimateResult, RelationResult } from '../core/destiny/index.js';
 import type { FortuneResult } from '../core/destiny/fortuneEngine.js';
+import { loadMemorySnapshot, saveMemorySnapshot } from '../data/database.js';
 
 const CURRENT_VERSION = 1;
 
@@ -56,20 +58,81 @@ function createEmptyStats(): MemoryStats {
 export class MemoryStore {
   private snapshot: MemorySnapshot;
   private dirty = false;
+  private _persist = false;
 
   constructor(userId: string, birthInfo: UserProfile['birthInfo']) {
     const user = createDefaultProfile(userId, birthInfo);
     this.snapshot = createEmptySnapshot(user);
   }
 
-  // ---- Persistence ----
+  // ---- SQLite Persistence ----
+
+  /**
+   * Enable SQLite persistence for this store.
+   * On first call, tries to load existing data from the database.
+   * After enabling, every mutation auto-saves to the database.
+   * Returns true if existing data was loaded, false if starting fresh.
+   */
+  enablePersistence(): boolean {
+    if (this._persist) return false;
+    this._persist = true;
+
+    const userId = this.snapshot.user.id;
+    const existing = loadMemorySnapshot(userId);
+    if (existing) {
+      try {
+        const loaded = JSON.parse(existing) as MemorySnapshot;
+        this.snapshot = loaded;
+        this.migrateIfNeeded();
+        this.dirty = false;
+        return true;
+      } catch {
+        // Corrupt data — start fresh
+      }
+    }
+    // Save initial state
+    this.persist();
+    return false;
+  }
+
+  /** Manually persist the current snapshot to SQLite. */
+  persist(): void {
+    if (!this._persist) return;
+    try {
+      saveMemorySnapshot(this.snapshot.user.id, JSON.stringify(this.snapshot));
+      this.dirty = false;
+    } catch {
+      // Best-effort persistence
+    }
+  }
+
+  /** Load a store from SQLite. Returns null if no data exists for this user. */
+  static load(userId: string): MemoryStore | null {
+    const raw = loadMemorySnapshot(userId);
+    if (!raw) return null;
+    try {
+      const data = JSON.parse(raw) as MemorySnapshot;
+      const store = new MemoryStore(data.user.id, data.user.birthInfo);
+      store.snapshot = data;
+      store.migrateIfNeeded();
+      store._persist = true;
+      return store;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Whether SQLite persistence is enabled. */
+  isPersisted(): boolean { return this._persist; }
+
+  // ---- Serialization (import/export) ----
 
   /** Serialize the full snapshot to JSON */
   toJSON(): string {
     return JSON.stringify(this.snapshot, null, 2);
   }
 
-  /** Load from a JSON string */
+  /** Load from a JSON string (no DB interaction). */
   static fromJSON(json: string): MemoryStore {
     const raw = JSON.parse(json) as MemorySnapshot;
     const store = new MemoryStore(raw.user.id, raw.user.birthInfo);
@@ -78,19 +141,21 @@ export class MemoryStore {
     return store;
   }
 
-  /** Check if there are unsaved changes */
+  /** Check if there are unsaved in-memory changes. */
   isDirty(): boolean { return this.dirty; }
 
-  /** Mark as saved */
+  /** Mark as saved (only relevant without persistence). */
   markClean(): void { this.dirty = false; }
 
   private touch(): void {
     this.dirty = true;
     this.snapshot.user.updatedAt = new Date().toISOString();
+    if (this._persist) {
+      this.persist();
+    }
   }
 
   private migrateIfNeeded(): void {
-    // Future: handle version migrations
     if (this.snapshot.version < CURRENT_VERSION) {
       this.snapshot.version = CURRENT_VERSION;
       this.touch();

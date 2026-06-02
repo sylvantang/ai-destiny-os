@@ -45,6 +45,32 @@ function initTables(database: Database.Database): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (record_id) REFERENCES birth_records(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS memory_snapshots (
+      user_id TEXT PRIMARY KEY,
+      version INTEGER NOT NULL DEFAULT 1,
+      snapshot_data TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      birth_info TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS session_turns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL,
+      role TEXT NOT NULL CHECK(role IN ('user', 'agent')),
+      content TEXT NOT NULL,
+      topic TEXT,
+      timestamp TEXT NOT NULL,
+      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+    );
   `);
 }
 
@@ -179,6 +205,150 @@ export function getHistory(recordId: number, limit = 50): AnalysisEntry[] {
 export function deleteAnalysisHistory(recordId: number): void {
   const d = getDb();
   d.prepare('DELETE FROM analysis_history WHERE record_id = ?').run(recordId);
+}
+
+// ---- Memory Snapshots ----
+
+export interface MemorySnapshotRow {
+  userId: string;
+  version: number;
+  snapshotData: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function saveMemorySnapshot(userId: string, snapshotData: string): void {
+  const d = getDb();
+  d.prepare(`
+    INSERT INTO memory_snapshots (user_id, version, snapshot_data, updated_at)
+    VALUES (@uid, 1, @data, datetime('now'))
+    ON CONFLICT(user_id) DO UPDATE SET
+      snapshot_data = excluded.snapshot_data,
+      updated_at = datetime('now')
+  `).run({ uid: userId, data: snapshotData });
+}
+
+export function loadMemorySnapshot(userId: string): string | null {
+  const d = getDb();
+  const row = d.prepare(
+    'SELECT snapshot_data FROM memory_snapshots WHERE user_id = ?',
+  ).get(userId) as { snapshot_data: string } | undefined;
+  return row ? row.snapshot_data : null;
+}
+
+export function deleteMemorySnapshot(userId: string): void {
+  const d = getDb();
+  d.prepare('DELETE FROM memory_snapshots WHERE user_id = ?').run(userId);
+}
+
+// ---- Sessions ----
+
+export interface SessionRow {
+  id: string;
+  userId: string;
+  birthInfo: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function createSession(sessionId: string, userId: string, birth: BirthInfo): SessionRow {
+  const d = getDb();
+  d.prepare(
+    'INSERT INTO sessions (id, user_id, birth_info) VALUES (@id, @uid, @birth)',
+  ).run({ id: sessionId, uid: userId, birth: JSON.stringify(birth) });
+  return getSession(sessionId)!;
+}
+
+export function getSession(sessionId: string): SessionRow | null {
+  const d = getDb();
+  const row = d.prepare('SELECT * FROM sessions WHERE id = ?').get(sessionId) as
+    | Record<string, unknown>
+    | undefined;
+  if (!row) return null;
+  return {
+    id: row['id'] as string,
+    userId: row['user_id'] as string,
+    birthInfo: row['birth_info'] as string,
+    createdAt: row['created_at'] as string,
+    updatedAt: row['updated_at'] as string,
+  };
+}
+
+export function listSessions(): SessionRow[] {
+  const d = getDb();
+  const rows = d.prepare(
+    'SELECT * FROM sessions ORDER BY updated_at DESC',
+  ).all() as Array<Record<string, unknown>>;
+  return rows.map(row => ({
+    id: row['id'] as string,
+    userId: row['user_id'] as string,
+    birthInfo: row['birth_info'] as string,
+    createdAt: row['created_at'] as string,
+    updatedAt: row['updated_at'] as string,
+  }));
+}
+
+export function touchSession(sessionId: string): void {
+  const d = getDb();
+  d.prepare("UPDATE sessions SET updated_at = datetime('now') WHERE id = ?").run(sessionId);
+}
+
+export function deleteSession(sessionId: string): void {
+  const d = getDb();
+  d.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
+}
+
+// ---- Session Turns ----
+
+export interface SessionTurnRow {
+  id: number;
+  sessionId: string;
+  role: 'user' | 'agent';
+  content: string;
+  topic: string | null;
+  timestamp: string;
+}
+
+export function addSessionTurn(
+  sessionId: string,
+  role: 'user' | 'agent',
+  content: string,
+  topic?: string,
+): SessionTurnRow {
+  const d = getDb();
+  const timestamp = new Date().toISOString();
+  const result = d.prepare(
+    'INSERT INTO session_turns (session_id, role, content, topic, timestamp) VALUES (@sid, @role, @content, @topic, @ts)',
+  ).run({ sid: sessionId, role, content, topic: topic ?? null, ts: timestamp });
+  touchSession(sessionId);
+  return {
+    id: result.lastInsertRowid as number,
+    sessionId,
+    role,
+    content,
+    topic: topic ?? null,
+    timestamp,
+  };
+}
+
+export function getSessionTurns(sessionId: string, limit = 100): SessionTurnRow[] {
+  const d = getDb();
+  const rows = d.prepare(
+    'SELECT * FROM session_turns WHERE session_id = ? ORDER BY id ASC LIMIT ?',
+  ).all(sessionId, limit) as Array<Record<string, unknown>>;
+  return rows.map(row => ({
+    id: row['id'] as number,
+    sessionId: row['session_id'] as string,
+    role: row['role'] as 'user' | 'agent',
+    content: row['content'] as string,
+    topic: row['topic'] as string | null,
+    timestamp: row['timestamp'] as string,
+  }));
+}
+
+export function deleteSessionTurns(sessionId: string): void {
+  const d = getDb();
+  d.prepare('DELETE FROM session_turns WHERE session_id = ?').run(sessionId);
 }
 
 // ---- Utility ----
