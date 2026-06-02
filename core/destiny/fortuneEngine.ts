@@ -5,6 +5,11 @@
 
 import type { BaZi, DaYunPillar, LiuNian } from '../astro/types.js';
 import { getShiShen } from '../astro/constants.js';
+import {
+  isClash, isCombination, getPunishment, isHarm,
+  THREE_HARMONY_SETS,
+  isStemClash, isStemCombine,
+} from '../astro/earthlyBranchRelations.js';
 import type { StrengthResult } from './strengthEngine.js';
 import type { StructureResult } from './structureEngine.js';
 import type { ClimateResult } from './climateEngine.js';
@@ -75,7 +80,7 @@ export function analyzeFortune(
   dayun: DaYunPillar[],
   liunian: LiuNian[],
 ): FortuneResult {
-  const yearlyAnalysis = buildYearlyAnalysis(dayun, liunian);
+  const yearlyAnalysis = buildYearlyAnalysis(dayun, liunian, bazi);
   const overall = buildOverallAssessment(yearlyAnalysis, structure, climate);
   const lifePeriods = buildLifePeriods(dayun, bazi);
   const keyYears = buildKeyYears(yearlyAnalysis);
@@ -91,20 +96,165 @@ export function analyzeFortune(
 
 // ---- Builders ----
 
-function buildYearlyAnalysis(dayun: DaYunPillar[], liunian: LiuNian[]): YearlyFortune[] {
+function buildYearlyAnalysis(
+  dayun: DaYunPillar[],
+  liunian: LiuNian[],
+  bazi: BaZi,
+): YearlyFortune[] {
   return liunian.map(ln => {
     const dy = dayun.find(d => ln.year >= d.startYear && ln.year < d.endYear) ?? null;
-    return {
-      year: ln.year,
-      daiyunPillar: dy ? `${dy.pillar.stem.name}${dy.pillar.branch.name}` : null,
-      liunianPillar: `${ln.pillar.stem.name}${ln.pillar.branch.name}`,
+    const baseScores = {
       career: ln.scores.career,
       wealth: ln.scores.wealth,
       relationship: ln.scores.relationship,
       health: ln.scores.health,
-      overall: ln.scores.overall,
+    };
+
+    // Apply 运岁关系 modifiers
+    const mod = dy
+      ? computeYunSuiModifiers(dy, ln, bazi)
+      : { career: 0, wealth: 0, relationship: 0, health: 0 };
+
+    const career = clamp(baseScores.career + mod.career);
+    const wealth = clamp(baseScores.wealth + mod.wealth);
+    const relationship = clamp(baseScores.relationship + mod.relationship);
+    const health = clamp(baseScores.health + mod.health);
+    const overall = Math.round((career + wealth + relationship + health) / 4);
+
+    return {
+      year: ln.year,
+      daiyunPillar: dy ? `${dy.pillar.stem.name}${dy.pillar.branch.name}` : null,
+      liunianPillar: `${ln.pillar.stem.name}${ln.pillar.branch.name}`,
+      career,
+      wealth,
+      relationship,
+      health,
+      overall,
     };
   });
+}
+
+// ---- 运岁关系 (DaYun-LiuNian Interaction) ----
+
+function computeYunSuiModifiers(
+  dayun: DaYunPillar,
+  liunian: LiuNian,
+  bazi: BaZi,
+): { career: number; wealth: number; relationship: number; health: number } {
+  const mod = { career: 0, wealth: 0, relationship: 0, health: 0 };
+  const dyStem = dayun.pillar.stemIndex;
+  const dyBranch = dayun.pillar.branchIndex;
+  const lnStem = liunian.pillar.stemIndex;
+  const lnBranch = liunian.pillar.branchIndex;
+
+  const stemClash = isStemClash(dyStem, lnStem);
+  const branchClash = isClash(dyBranch, lnBranch);
+  const branchCombine = isCombination(dyBranch, lnBranch);
+  const stemCombine = isStemCombine(dyStem, lnStem);
+  const punishment = getPunishment(dyBranch, lnBranch);
+  const harm = isHarm(dyBranch, lnBranch);
+
+  // 天克地冲: both stem and branch clash — most volatile
+  if (stemClash && branchClash) {
+    mod.career -= 10;
+    mod.wealth -= 12;
+    mod.relationship -= 8;
+    mod.health -= 15;
+  }
+  // 天合地合: both stem and branch combine — most favorable
+  else if (stemCombine && branchCombine) {
+    mod.career += 8;
+    mod.wealth += 8;
+    mod.relationship += 10;
+    mod.health += 5;
+  }
+  // Individual interactions
+  else {
+    // 天克 (stem clash)
+    if (stemClash) {
+      mod.career -= 5;
+      mod.wealth -= 3;
+      mod.relationship -= 3;
+      mod.health -= 5;
+    }
+
+    // 天合 (stem combine)
+    if (stemCombine) {
+      mod.career += 4;
+      mod.wealth += 3;
+      mod.relationship += 5;
+      mod.health += 2;
+    }
+
+    // 地冲 (branch clash)
+    if (branchClash) {
+      mod.career -= 5;
+      mod.wealth -= 5;
+      mod.relationship -= 5;
+      mod.health -= 8;
+    }
+
+    // 地合 (branch combine)
+    if (branchCombine) {
+      mod.career += 4;
+      mod.wealth += 4;
+      mod.relationship += 5;
+      mod.health += 3;
+    }
+
+    // 三合 check: DaYun branch + LiuNian branch + a natal branch
+    const natalBranches = [
+      bazi.year.branchIndex,
+      bazi.month.branchIndex,
+      bazi.day.branchIndex,
+      bazi.hour.branchIndex,
+    ];
+    for (const set of THREE_HARMONY_SETS) {
+      const needed = set.branches.filter(
+        b => b !== dyBranch && b !== lnBranch,
+      );
+      if (needed.length === 1 && natalBranches.includes(needed[0]!)) {
+        // 三合局 triggered — favorable or unfavorable based on combined element
+        const dmWx = bazi.day.stem.wuxing;
+        const combinedWx = set.wuxing;
+        const isFavorable =
+          combinedWx === dmWx ||
+          (combinedWx === '水' && dmWx === '木') ||
+          (combinedWx === '木' && dmWx === '火') ||
+          (combinedWx === '火' && dmWx === '土') ||
+          (combinedWx === '土' && dmWx === '金') ||
+          (combinedWx === '金' && dmWx === '水');
+        const delta = isFavorable ? 5 : -3;
+        mod.career += delta;
+        mod.wealth += delta;
+        mod.relationship += delta;
+        mod.health += delta;
+        break;
+      }
+    }
+
+    // 刑 (punishment)
+    if (punishment) {
+      mod.career -= 3;
+      mod.wealth -= 4;
+      mod.relationship -= 4;
+      mod.health -= 3;
+    }
+
+    // 害 (harm)
+    if (harm && !punishment) {
+      mod.career -= 2;
+      mod.wealth -= 2;
+      mod.relationship -= 3;
+      mod.health -= 2;
+    }
+  }
+
+  return mod;
+}
+
+function clamp(value: number): number {
+  return Math.max(0, Math.min(100, Math.round(value)));
 }
 
 function buildOverallAssessment(
