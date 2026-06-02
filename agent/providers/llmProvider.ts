@@ -57,7 +57,7 @@ export class LLMProvider implements ResponseProvider {
   async *respondStream(
     topic: QueryDomain,
     state: ProviderState,
-    chart: import('../../core/astro/types.js').DestinyChart,
+    _chart: import('../../core/astro/types.js').DestinyChart,
     prompt: AIPrompt,
     history: ConversationTurn[],
     memory: MemoryStore | null,

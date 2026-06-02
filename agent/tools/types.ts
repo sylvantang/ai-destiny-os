@@ -3,7 +3,7 @@
 // OpenAI function-calling JSON Schema format.
 // ============================================================
 
-import type { BirthInfo, DestinyChart } from '../../core/astro/types.js';
+import type { DestinyChart } from '../../core/astro/types.js';
 import type { PromptContext } from '../../ai/promptBuilder.js';
 import type { PersonalityResult } from '../../ai/personality.js';
 import type { CareerResult } from '../../ai/career.js';

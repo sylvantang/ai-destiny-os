@@ -56,8 +56,8 @@ export const searchMemoryTool: ToolDefinition = {
     if (predictions.length > 0) {
       lines.push('【运势预测】');
       for (const p of predictions.slice(0, 5)) {
-        const status = p.verified ? (p.accuracy !== undefined ? `准确率${p.accuracy}%` : '已验证') : '未验证';
-        lines.push(`- ${p.targetYear}年: ${p.summary}（${status}）`);
+        const status = p.verified ? (p.accuracyRating !== null ? `准确度${p.accuracyRating > 0 ? '+' : ''}${p.accuracyRating}` : '已验证') : '未验证';
+        lines.push(`- ${p.targetYear}年: ${p.predicted}（${status}）`);
       }
     }
 
