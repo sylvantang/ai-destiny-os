@@ -60,8 +60,8 @@ export async function POST(request: Request) {
         pattern: ctx.structure.primaryPattern,
         strength: ctx.strength.level,
         fortune: ctx.fortune.overall.level,
-        yongShen: ctx.strength.yongShen?.wuxing || undefined,
-        xiShen: ctx.strength.xiShen?.map((x: { wuxing: string }) => x.wuxing) || undefined,
+        yongShen: ctx.yongShen.yongShen.wuxing,
+        xiShen: ctx.yongShen.xiShen.map((x) => x.wuxing),
       });
 
       send({ type: 'status', status: 'thinking' });

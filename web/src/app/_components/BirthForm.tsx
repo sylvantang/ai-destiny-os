@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 
 export interface BirthInfo {
@@ -17,6 +18,26 @@ const defaults: BirthInfo = {
   longitude: 116.4, gender: '男',
 };
 
+const CITIES: { label: string; lng: number }[] = [
+  { label: '北京', lng: 116.4 },
+  { label: '上海', lng: 121.5 },
+  { label: '广州', lng: 113.3 },
+  { label: '深圳', lng: 114.1 },
+  { label: '西安', lng: 108.9 },
+  { label: '成都', lng: 104.1 },
+  { label: '武汉', lng: 114.3 },
+  { label: '杭州', lng: 120.2 },
+  { label: '南京', lng: 118.8 },
+  { label: '重庆', lng: 106.5 },
+];
+
+const CUSTOM_CITY_VALUE = '__custom__';
+
+function findCity(lng: number): string {
+  const match = CITIES.find((c) => c.lng === lng);
+  return match ? String(match.lng) : CUSTOM_CITY_VALUE;
+}
+
 export function BirthForm({
   value,
   onChange,
@@ -26,40 +47,117 @@ export function BirthForm({
   onChange: (v: BirthInfo) => void;
   readonly?: boolean;
 }) {
+  const [cityValue, setCityValue] = useState(findCity(value.longitude));
+  const [showCustomLng, setShowCustomLng] = useState(cityValue === CUSTOM_CITY_VALUE);
+  const unknownHour = value.hour === -1;
+
   const set = (k: keyof BirthInfo) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const raw = e.target.value;
-    const val = (k === 'gender' || k === 'longitude') ? raw : Number(raw);
+    const val = k === 'gender' ? raw : Number(raw);
     onChange({ ...value, [k]: val });
   };
 
+  const handleCity = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const v = e.target.value;
+    setCityValue(v);
+    if (v === CUSTOM_CITY_VALUE) {
+      setShowCustomLng(true);
+    } else {
+      setShowCustomLng(false);
+      onChange({ ...value, longitude: Number(v) });
+    }
+  };
+
+  const handleUnknownHour = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      onChange({ ...value, hour: -1, minute: 0 });
+    } else {
+      onChange({ ...value, hour: 12, minute: 0 });
+    }
+  };
+
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-      <Field label="年">
-        <Input type="number" value={value.year} onChange={set('year')} disabled={readonly} className="h-9 text-sm" />
-      </Field>
-      <Field label="月">
-        <Input type="number" value={value.month} onChange={set('month')} min={1} max={12} disabled={readonly} className="h-9 text-sm" />
-      </Field>
-      <Field label="日">
-        <Input type="number" value={value.day} onChange={set('day')} min={1} max={31} disabled={readonly} className="h-9 text-sm" />
-      </Field>
-      <Field label="时">
-        <Input type="number" value={value.hour} onChange={set('hour')} min={0} max={23} disabled={readonly} className="h-9 text-sm" />
-      </Field>
-      <Field label="分">
-        <Input type="number" value={value.minute} onChange={set('minute')} min={0} max={59} disabled={readonly} className="h-9 text-sm" />
-      </Field>
-      <Field label="性别">
-        <select
-          value={value.gender}
-          onChange={set('gender')}
+    <div className="space-y-4">
+      {/* Year / Month / Day / Hour / Minute */}
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+        <Field label="年">
+          <Input type="number" value={value.year} onChange={set('year')} disabled={readonly} className="h-9 text-sm" />
+        </Field>
+        <Field label="月">
+          <Input type="number" value={value.month} onChange={set('month')} min={1} max={12} disabled={readonly} className="h-9 text-sm" />
+        </Field>
+        <Field label="日">
+          <Input type="number" value={value.day} onChange={set('day')} min={1} max={31} disabled={readonly} className="h-9 text-sm" />
+        </Field>
+        {!unknownHour && (
+          <>
+            <Field label="时">
+              <Input type="number" value={value.hour} onChange={set('hour')} min={0} max={23} disabled={readonly} className="h-9 text-sm" />
+            </Field>
+            <Field label="分">
+              <Input type="number" value={value.minute} onChange={set('minute')} min={0} max={59} disabled={readonly} className="h-9 text-sm" />
+            </Field>
+          </>
+        )}
+      </div>
+
+      {/* Unknown hour checkbox */}
+      <label className="flex items-center gap-2 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={unknownHour}
+          onChange={handleUnknownHour}
           disabled={readonly}
-          className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <option value="男">男</option>
-          <option value="女">女</option>
-        </select>
-      </Field>
+          className="h-4 w-4 rounded border-zinc-700 bg-zinc-900 text-destiny-600 focus:ring-destiny-600"
+        />
+        <span className="text-xs text-zinc-400">不知道具体时辰</span>
+        {unknownHour && (
+          <span className="text-xs text-amber-500">— 将使用日柱分析，准确度略低</span>
+        )}
+      </label>
+
+      {/* City + Gender */}
+      <div className="grid grid-cols-3 gap-3">
+        <Field label="出生地">
+          <select
+            value={cityValue}
+            onChange={handleCity}
+            disabled={readonly}
+            className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {CITIES.map((c) => (
+              <option key={c.label} value={String(c.lng)}>
+                {c.label}
+              </option>
+            ))}
+            <option value={CUSTOM_CITY_VALUE}>其他城市</option>
+          </select>
+        </Field>
+        {showCustomLng && (
+          <Field label="经度">
+            <Input
+              type="number"
+              value={value.longitude}
+              onChange={set('longitude')}
+              disabled={readonly}
+              placeholder="116.4"
+              step="0.1"
+              className="h-9 text-sm"
+            />
+          </Field>
+        )}
+        <Field label="性别">
+          <select
+            value={value.gender}
+            onChange={set('gender')}
+            disabled={readonly}
+            className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <option value="男">男</option>
+            <option value="女">女</option>
+          </select>
+        </Field>
+      </div>
     </div>
   );
 }
