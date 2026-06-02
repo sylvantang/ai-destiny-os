@@ -3,6 +3,7 @@ import type { BirthInfo } from '@engine/core/astro/types.js';
 import { calcBaZi, generateChart } from '@engine/core/astro/bazi.js';
 import { calcDaYun } from '@engine/core/astro/dayun.js';
 import { calcLiuNian } from '@engine/core/astro/liunian.js';
+import { ALL_STEMS } from '@engine/core/astro/constants.js';
 import { analyzeStrength } from '@engine/core/destiny/strengthEngine.js';
 import { analyzeStructure } from '@engine/core/destiny/structureEngine.js';
 import { analyzeClimate } from '@engine/core/destiny/climateEngine.js';
@@ -41,21 +42,39 @@ export async function POST(request: Request) {
     const fortune = analyzeFortune(bazi, strength, structure, climate, relations, dayun, liunian);
     const yongShen = deriveYongShen(bazi, strength, structure, climate);
 
+    const pillars = [bazi.year, bazi.month, bazi.day, bazi.hour];
+    const pillarLabels = ['year', 'month', 'day', 'hour'] as const;
+    const pillarNames = ['年柱', '月柱', '日柱', '时柱'];
+
     return NextResponse.json({
       chart: {
-        pillars: {
-          year: { stem: bazi.year.stem.name, branch: bazi.year.branch.name },
-          month: { stem: bazi.month.stem.name, branch: bazi.month.branch.name },
-          day: { stem: bazi.day.stem.name, branch: bazi.day.branch.name },
-          hour: { stem: bazi.hour.stem.name, branch: bazi.hour.branch.name },
-        },
+        pillars: Object.fromEntries(
+          pillars.map((p, i) => [
+            pillarLabels[i],
+            {
+              stem: { name: p.stem.name, wuxing: p.stem.wuxing, yinYang: p.stem.yinYang },
+              branch: { name: p.branch.name, wuxing: p.branch.wuxing },
+              shiShen: p.shiShen,
+              nayin: p.nayin,
+              hiddenStems: p.hiddenStems.map((idx) => ({
+                name: ALL_STEMS[idx]?.name ?? '?',
+                wuxing: ALL_STEMS[idx]?.wuxing ?? '?',
+              })),
+            },
+          ]),
+        ),
+        pillarLabels: Object.fromEntries(
+          pillarLabels.map((k, i) => [k, pillarNames[i]]),
+        ),
         dayMaster: { stem: chart.dayMaster.name, wuxing: chart.dayMasterWuxing },
+        wuxingCounts: chart.wuxingCount,
       },
       strength: {
         score: strength.strengthScore,
         level: strength.level,
         label: strength.levelLabel,
         summary: strength.summary,
+        breakdown: strength.scoring,
       },
       structure: {
         pattern: structure.primaryPattern,

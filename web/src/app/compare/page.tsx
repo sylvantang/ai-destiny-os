@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 import { BirthForm, birthToPayload, defaultBirth, type BirthInfo } from '../_components/BirthForm';
-import { Card, Row } from '../_components/Card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Loader2 } from 'lucide-react';
 
 export default function ComparePage() {
   const [self, setSelf] = useState<BirthInfo>({ ...defaultBirth });
@@ -33,55 +35,61 @@ export default function ComparePage() {
   };
 
   return (
-    <div>
-      <h1 style={{ fontSize: '1.3rem', marginBottom: '1rem' }}>合盘</h1>
+    <div className="space-y-4 max-w-2xl mx-auto">
+      <h1 className="text-xl font-semibold tracking-tight">合盘</h1>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
-        <Card title="本人">
-          <BirthForm value={self} onChange={setSelf} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader className="pb-3"><CardTitle className="text-base">本人</CardTitle></CardHeader>
+          <CardContent><BirthForm value={self} onChange={setSelf} /></CardContent>
         </Card>
-        <Card title="对方">
-          <BirthForm value={other} onChange={setOther} />
+        <Card>
+          <CardHeader className="pb-3"><CardTitle className="text-base">对方</CardTitle></CardHeader>
+          <CardContent><BirthForm value={other} onChange={setOther} /></CardContent>
         </Card>
       </div>
 
-      <div style={{ marginTop: '1rem' }}>
-        <button onClick={submit} disabled={loading} style={btnStyle}>
-          {loading ? '合盘中...' : '开始合盘'}
-        </button>
-        {error && <p style={{ color: 'red', marginTop: '0.5rem' }}>{error}</p>}
-      </div>
+      <Button onClick={submit} disabled={loading} className="w-full">
+        {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />合盘中...</> : '开始合盘'}
+      </Button>
+      {error && <p className="text-sm text-red-400">{error}</p>}
 
       {result && (
         <>
-          <Card title="合盘结果">
-            <div style={{ marginBottom: '0.75rem' }}>
-              <div style={{ fontWeight: 600, color: '#b45309', marginBottom: '0.25rem' }}>五行</div>
-              <div style={{ fontSize: '0.95rem' }}>{result.compatibility?.wuxing}</div>
-            </div>
-            <div>
-              <div style={{ fontWeight: 600, color: '#b45309', marginBottom: '0.25rem' }}>用神</div>
-              <div style={{ fontSize: '0.95rem' }}>{result.compatibility?.yongShen}</div>
-            </div>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">合盘结果</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div>
+                <div className="font-semibold text-destiny-400 mb-1">五行</div>
+                <div className="text-muted-foreground">{result.compatibility?.wuxing}</div>
+              </div>
+              <div>
+                <div className="font-semibold text-destiny-400 mb-1">用神</div>
+                <div className="text-muted-foreground">{result.compatibility?.yongShen}</div>
+              </div>
+            </CardContent>
           </Card>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
-            <Card title="本人">
-              <Row label="日主" value={result.self?.dayMaster} />
-              <Row label="旺衰" value={`${result.self?.strength?.level}（${result.self?.strength?.score}分）`} />
-              <Row label="格局" value={result.self?.structure?.pattern} />
-              <Row label="格局喜忌" value={result.self?.structure?.favorable ? '喜' : '忌'} />
-              <Row label="用神" value={`${result.self?.yongShen?.wuxing}（${result.self?.yongShen?.shiShen}）`} />
-              <Row label="运势" value={`${result.self?.fortune?.level}（${result.self?.fortune?.score}分）`} />
-            </Card>
-            <Card title="对方">
-              <Row label="日主" value={result.other?.dayMaster} />
-              <Row label="旺衰" value={`${result.other?.strength?.level}（${result.other?.strength?.score}分）`} />
-              <Row label="格局" value={result.other?.structure?.pattern} />
-              <Row label="格局喜忌" value={result.other?.structure?.favorable ? '喜' : '忌'} />
-              <Row label="用神" value={`${result.other?.yongShen?.wuxing}（${result.other?.yongShen?.shiShen}）`} />
-              <Row label="运势" value={`${result.other?.fortune?.level}（${result.other?.fortune?.score}分）`} />
-            </Card>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {(['self', 'other'] as const).map((key) => {
+              const d = result[key];
+              const label = key === 'self' ? '本人' : '对方';
+              return (
+                <Card key={key}>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">{label}</CardTitle></CardHeader>
+                  <CardContent className="space-y-1 text-sm">
+                    <Row label="日主" value={d?.dayMaster} />
+                    <Row label="旺衰" value={`${d?.strength?.level}（${d?.strength?.score}分）`} highlight />
+                    <Row label="格局" value={d?.structure?.pattern} />
+                    <Row label="喜忌" value={d?.structure?.favorable ? '喜' : '忌'} />
+                    <Row label="用神" value={`${d?.yongShen?.wuxing}（${d?.yongShen?.shiShen}）`} highlight />
+                    <Row label="运势" value={`${d?.fortune?.level}（${d?.fortune?.score}分）`} />
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </>
       )}
@@ -89,8 +97,11 @@ export default function ComparePage() {
   );
 }
 
-const btnStyle: React.CSSProperties = {
-  padding: '0.6rem 2rem',
-  background: '#b45309', color: '#fff', border: 'none',
-  borderRadius: 4, fontSize: '0.95rem', cursor: 'pointer',
-};
+function Row({ label, value, highlight }: { label: string; value?: string | null; highlight?: boolean }) {
+  return (
+    <div className="flex justify-between py-0.5">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className={`text-xs font-medium ${highlight ? 'text-destiny-400' : ''}`}>{value || '—'}</span>
+    </div>
+  );
+}

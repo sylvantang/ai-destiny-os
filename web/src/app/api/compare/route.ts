@@ -22,7 +22,7 @@ export async function POST(request: Request) {
       minute: (info.minute as number) ?? 0,
       longitude: (info.longitude as number) ?? 116.4,
       isDST: (info.isDST as boolean) ?? false,
-      gender: (info.gender as string) ?? '男',
+      gender: info.gender === '女' ? '女' : '男',
     });
 
     const selfCtx = buildDestinyContext(toBirth(selfInfo));

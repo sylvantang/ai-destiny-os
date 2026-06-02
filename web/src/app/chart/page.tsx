@@ -2,7 +2,11 @@
 
 import { useState } from 'react';
 import { BirthForm, birthToPayload, defaultBirth, type BirthInfo } from '../_components/BirthForm';
-import { Card, Row } from '../_components/Card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { BaziChart } from '@/components/BaziChart';
+import { WuXingBalance } from '@/components/WuXingBalance';
+import { Loader2 } from 'lucide-react';
 
 export default function ChartPage() {
   const [birth, setBirth] = useState<BirthInfo>({ ...defaultBirth });
@@ -11,7 +15,9 @@ export default function ChartPage() {
   const [error, setError] = useState('');
 
   const submit = async () => {
-    setLoading(true); setError(''); setResult(null);
+    setLoading(true);
+    setError('');
+    setResult(null);
     try {
       const res = await fetch('/api/chart', {
         method: 'POST',
@@ -28,93 +34,153 @@ export default function ChartPage() {
     }
   };
 
-  const { chart, strength, structure, yongShen, fortune, climate, relations } = result || {};
+  const { chart, strength, structure, yongShen, fortune, climate } = result || {};
 
   return (
-    <div>
-      <h1 style={{ fontSize: '1.3rem', marginBottom: '1rem' }}>排盘</h1>
+    <div className="space-y-4 max-w-2xl mx-auto">
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold tracking-tight">排盘</h1>
+      </div>
 
-      <Card title="出生信息">
-        <BirthForm value={birth} onChange={setBirth} />
-        <button onClick={submit} disabled={loading} style={btnStyle}>
-          {loading ? '排盘中...' : '开始排盘'}
-        </button>
-        {error && <p style={{ color: 'red', marginTop: '0.5rem' }}>{error}</p>}
+      {/* Birth form */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">出生信息</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <BirthForm value={birth} onChange={setBirth} />
+          <Button onClick={submit} disabled={loading} className="mt-4 w-full">
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                排盘中...
+              </>
+            ) : (
+              '开始排盘'
+            )}
+          </Button>
+          {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
+        </CardContent>
       </Card>
 
       {result && (
         <>
-          <Card title="四柱八字">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', textAlign: 'center' }}>
-              {['年柱', '月柱', '日柱', '时柱'].map((label, i) => {
-                const key = ['year', 'month', 'day', 'hour'][i];
-                const p = chart?.pillars?.[key];
-                return (
-                  <div key={label} style={{ background: '#f9f6f0', borderRadius: 6, padding: '0.75rem' }}>
-                    <div style={{ fontSize: '0.8rem', color: '#999' }}>{label}</div>
-                    <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#b45309' }}>{p?.stem}</div>
-                    <div style={{ fontSize: '1.4rem', fontWeight: 700 }}>{p?.branch}</div>
-                  </div>
-                );
-              })}
-            </div>
-            <div style={{ marginTop: '0.75rem', textAlign: 'center', fontSize: '0.95rem' }}>
-              日主：<strong>{chart?.dayMaster?.stem}{chart?.dayMaster?.wuxing}</strong>
-            </div>
+          {/* BaziChart — Four Pillars */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">四柱八字</CardTitle>
+              <CardDescription>
+                {chart?.dayMaster?.stem}
+                {chart?.dayMaster?.wuxing}日主 · {structure?.pattern}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <BaziChart data={chart} />
+            </CardContent>
           </Card>
 
-          <Card title="旺衰">
-            <Row label="评分" value={`${strength?.score} 分`} />
-            <Row label="等级" value={strength?.level} />
-            <Row label="判断" value={strength?.label} />
-          </Card>
-
-          <Card title="格局">
-            <Row label="主格" value={structure?.pattern} />
-            <Row label="子格" value={structure?.subPattern} />
-            <Row label="十神" value={structure?.shiShen} />
-            <Row label="是否为喜" value={structure?.isFavorable ? '是' : '否'} />
-          </Card>
-
-          <Card title="用神">
-            <Row label="用神" value={yongShen?.yongShen?.wuxing || yongShen?.yongShen} />
-            <Row label="喜神" value={yongShen?.xiShen?.wuxing || yongShen?.xiShen} />
-            <Row label="忌神" value={yongShen?.jiShen?.wuxing || yongShen?.jiShen} />
-          </Card>
-
-          {climate && (
-            <Card title="气候调候">
-              <Row label="是否需要" value={climate?.needsAdjustment ? '是' : '否'} />
-              <Row label="所需五行" value={climate?.neededWuxing || '-'} />
-              <Row label="优先级" value={climate?.priority || '-'} />
+          {/* WuXing Balance */}
+          {chart?.wuxingCounts && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">五行平衡</CardTitle>
+                <CardDescription>八字中各五行元素的分布状态</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <WuXingBalance wuxingCounts={chart.wuxingCounts} yongShen={yongShen} />
+              </CardContent>
             </Card>
           )}
 
-          <Card title="运势">
-            <Row label="综合评分" value={`${fortune?.overall?.score} 分`} />
-            <Row label="运势等级" value={fortune?.overall?.level} />
-            {fortune?.keyYears?.length > 0 && (
-              <>
-                <div style={{ marginTop: '0.75rem', fontSize: '0.85rem', color: '#888' }}>关键年份</div>
-                {fortune.keyYears.slice(0, 5).map((y: any) => (
-                  <Row key={y.year} label={`${y.year}年`} value={`${y.level}（${y.score}分）`} />
-                ))}
-              </>
+          {/* Strength + Structure side by side */}
+          <div className="grid grid-cols-2 gap-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">旺衰</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1 text-sm">
+                <Row label="评分" value={`${strength?.score} 分`} />
+                <Row label="等级" value={strength?.level} highlight />
+                <Row label="判断" value={strength?.label} />
+                {strength?.summary && (
+                  <p className="pt-2 text-xs text-muted-foreground leading-relaxed">{strength.summary}</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">格局</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1 text-sm">
+                <Row label="主格" value={structure?.pattern} highlight />
+                <Row label="子格" value={structure?.subPattern || '-'} />
+                <Row label="十神" value={structure?.shiShen || '-'} />
+                <Row label="喜忌" value={structure?.isFavorable ? '为喜' : '为忌'} />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* YongShen details */}
+          {yongShen && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">用神体系</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1 text-sm">
+                <Row label="用神" value={yongShen?.yongShen?.wuxing} highlight />
+                <Row
+                  label="喜神"
+                  value={yongShen?.xiShen?.map((x: any) => x.wuxing).join('、')}
+                />
+                <Row
+                  label="忌神"
+                  value={yongShen?.jiShen?.map((x: any) => x.wuxing).join('、')}
+                />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Climate + Fortune */}
+          <div className="grid grid-cols-2 gap-4">
+            {climate && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">调候</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-1 text-sm">
+                  <Row label="是否需要" value={climate?.needsAdjustment ? '需要' : '无需'} />
+                  <Row label="所需五行" value={climate?.neededWuxing || '—'} highlight />
+                  <Row label="状态" value={climate?.condition || '—'} />
+                </CardContent>
+              </Card>
             )}
-          </Card>
 
-          {relations && (
-            <Card title="十神关系">
-              <Row label="主调" value={relations?.theme} />
-              <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#555', lineHeight: 1.7 }}>{relations?.summary}</div>
-            </Card>
-          )}
+            {fortune && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">综合运势</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-1 text-sm">
+                  <Row label="评分" value={`${fortune?.overall?.score} 分`} highlight />
+                  <Row label="等级" value={fortune?.overall?.level} />
+                  <Row label="最佳领域" value={fortune?.overall?.bestDimension || '—'} />
+                </CardContent>
+              </Card>
+            )}
+          </div>
 
+          {/* Visualization */}
           {result.visualization && (
-            <Card title="排盘">
-              <pre style={{ fontSize: '0.8rem', lineHeight: 1.4, overflow: 'auto', background: '#f9f6f0', padding: '0.75rem', borderRadius: 4 }}>
-                {result.visualization}
-              </pre>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">排盘文本</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <pre className="text-xs font-mono leading-relaxed overflow-auto p-3 rounded-lg bg-black/20 text-muted-foreground max-h-64">
+                  {result.visualization}
+                </pre>
+              </CardContent>
             </Card>
           )}
         </>
@@ -123,8 +189,13 @@ export default function ChartPage() {
   );
 }
 
-const btnStyle: React.CSSProperties = {
-  marginTop: '1rem', padding: '0.6rem 2rem',
-  background: '#b45309', color: '#fff', border: 'none',
-  borderRadius: 4, fontSize: '0.95rem', cursor: 'pointer',
-};
+function Row({ label, value, highlight }: { label: string; value?: string | null; highlight?: boolean }) {
+  return (
+    <div className="flex justify-between items-center py-0.5">
+      <span className="text-muted-foreground text-xs">{label}</span>
+      <span className={`text-xs font-medium ${highlight ? 'text-destiny-400' : ''}`}>
+        {value || '—'}
+      </span>
+    </div>
+  );
+}

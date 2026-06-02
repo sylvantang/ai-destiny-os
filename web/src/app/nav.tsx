@@ -12,22 +12,23 @@ const links = [
 export function NavBar() {
   const path = usePathname();
   return (
-    <nav style={{ background: '#fff', borderBottom: '1px solid #e5e5e5', padding: '0 1rem' }}>
-      <div style={{ maxWidth: 800, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 0 }}>
-        <Link href="/" style={{ fontWeight: 700, fontSize: '1.1rem', marginRight: '1.5rem', color: '#222', textDecoration: 'none' }}>
+    <nav className="sticky top-0 z-50 border-b border-[hsl(var(--border))] bg-[hsl(var(--card))]/80 backdrop-blur-md">
+      <div className="mx-auto flex max-w-4xl items-center px-4">
+        <Link
+          href="/"
+          className="mr-6 py-4 text-lg font-bold tracking-tight text-destiny-500 hover:text-destiny-400 transition-colors"
+        >
           AI Destiny OS
         </Link>
         {links.map(({ href, label }) => (
           <Link
             key={href}
             href={href}
-            style={{
-              padding: '1rem 1rem',
-              color: path === href ? '#b45309' : '#555',
-              borderBottom: path === href ? '2px solid #b45309' : '2px solid transparent',
-              textDecoration: 'none',
-              fontWeight: path === href ? 600 : 400,
-            }}
+            className={`px-4 py-4 text-sm font-medium transition-colors border-b-2 -mb-[1px] ${
+              path === href
+                ? 'border-destiny-500 text-destiny-400'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
           >
             {label}
           </Link>
