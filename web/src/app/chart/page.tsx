@@ -169,20 +169,6 @@ export default function ChartPage() {
               </Card>
             )}
           </div>
-
-          {/* Visualization */}
-          {result.visualization && (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">排盘文本</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <pre className="text-xs font-mono leading-relaxed overflow-auto p-3 rounded-lg bg-black/20 text-muted-foreground max-h-64">
-                  {result.visualization}
-                </pre>
-              </CardContent>
-            </Card>
-          )}
         </>
       )}
     </div>
