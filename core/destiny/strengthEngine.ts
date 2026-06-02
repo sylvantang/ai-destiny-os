@@ -6,7 +6,10 @@
 
 import type { BaZi, EarthlyBranchIndex, HeavenlyStemIndex, Wuxing } from '../astro/types.js';
 import { ALL_STEMS, HIDDEN_STEMS, getShiShen } from '../astro/constants.js';
-import { isClash, isCombination, COMBINATION_WUXING, getPunishment, isHarm } from '../astro/earthlyBranchRelations.js';
+import {
+  isClash, isCombination, COMBINATION_WUXING, getPunishment, isHarm,
+  THREE_HARMONY_SETS, getHalfHarmony, THREE_MEETING_SETS,
+} from '../astro/earthlyBranchRelations.js';
 import type { ClimateResult } from './climateEngine.js';
 
 // ---- Types ----
@@ -47,6 +50,7 @@ export interface StrengthResult {
     stemSupport: number;
     branchSupport: number;
     weakening: number;
+    threeHarmony: number;
     climateAdjustment: number;
     total: number;
   };
@@ -214,6 +218,9 @@ export function analyzeStrength(bazi: BaZi, climate?: ClimateResult): StrengthRe
   // 刑冲合害 interaction factors
   const interactions = analyzeInteractions(bazi, dmWx);
 
+  // 三合/半合/三会 combinations
+  const threeHarmonies = analyzeThreeHarmonies(bazi, dmWx);
+
   // 十二长生: day stem sitting on day branch
   const twelveStage = analyzeTwelveStages(bazi);
 
@@ -255,6 +262,7 @@ export function analyzeStrength(bazi: BaZi, climate?: ClimateResult): StrengthRe
     })),
     ...(climateFactor ? [climateFactor] : []),
     ...(touGanFactor ? [touGanFactor] : []),
+    ...threeHarmonies,
     ...interactions,
   ];
 
@@ -272,6 +280,7 @@ export function analyzeStrength(bazi: BaZi, climate?: ClimateResult): StrengthRe
     weakening: weakening.reduce((s, w) => s + w.score, 0),
     twelveStage: twelveStage.score,
     touGan: touGanFactor?.score ?? 0,
+    threeHarmony: threeHarmonies.reduce((s, f) => s + f.score, 0),
     climateAdjustment: climateFactor?.score ?? 0,
     total: clampedScore,
   };
@@ -488,6 +497,85 @@ function analyzeInteractions(bazi: BaZi, dmWx: string): StrengthFactor[] {
   }
 
   return factors;
+}
+
+// ---- 三合/半合/三会 (Three Harmony / Meeting Combinations) ----
+
+function analyzeThreeHarmonies(bazi: BaZi, dmWx: string): StrengthFactor[] {
+  const branches = [
+    bazi.year.branchIndex,
+    bazi.month.branchIndex,
+    bazi.day.branchIndex,
+    bazi.hour.branchIndex,
+  ];
+  const factors: StrengthFactor[] = [];
+
+  // Check 三合局 (all 3 branches present)
+  for (const set of THREE_HARMONY_SETS) {
+    const [a, b, c] = set.branches;
+    if (branches.includes(a) && branches.includes(b) && branches.includes(c)) {
+      const score = scoreCombinedElement(set.wuxing, dmWx, 12, 8);
+      factors.push({
+        name: set.name,
+        category: score >= 0 ? 'support' : 'weaken',
+        score,
+        description: `三合${set.wuxing}局，${
+          score >= 0 ? '化合之气生扶日主' : '化合之气削弱日主'
+        }`,
+      });
+    }
+  }
+
+  // Check 半合局 (2 of 3 branches, must include central branch)
+  for (let i = 0; i < branches.length; i++) {
+    for (let j = i + 1; j < branches.length; j++) {
+      const half = getHalfHarmony(branches[i]!, branches[j]!);
+      if (half) {
+        const score = scoreCombinedElement(half.wuxing, dmWx, 6, 4);
+        factors.push({
+          name: half.name,
+          category: score >= 0 ? 'support' : 'weaken',
+          score,
+          description: `半合${half.wuxing}局，${
+            score >= 0 ? '半合之气生扶日主' : '半合之气削弱日主'
+          }`,
+        });
+      }
+    }
+  }
+
+  // Check 三会局 (3 consecutive branches)
+  for (const set of THREE_MEETING_SETS) {
+    const [a, b, c] = set.branches;
+    if (branches.includes(a) && branches.includes(b) && branches.includes(c)) {
+      const score = scoreCombinedElement(set.wuxing, dmWx, 15, 10);
+      factors.push({
+        name: set.name,
+        category: score >= 0 ? 'support' : 'weaken',
+        score,
+        description: `三会${set.wuxing}局（方局），${
+          score >= 0 ? '方局之气生扶日主' : '方局之气削弱日主'
+        }`,
+      });
+    }
+  }
+
+  return factors;
+}
+
+/** Score a combined element's effect on the day master. */
+function scoreCombinedElement(
+  combinedWx: string,
+  dmWx: string,
+  supportScore: number,
+  weakenScore: number,
+): number {
+  if (combinedWx === dmWx) return supportScore;           // same → strong support
+  if (generates(combinedWx, dmWx)) return supportScore;   // generates DM → support
+  if (generates(dmWx, combinedWx)) return -weakenScore;   // DM generates → weaken
+  if (controls(combinedWx, dmWx)) return -(weakenScore + 2); // controls DM → heavy weaken
+  if (controls(dmWx, combinedWx)) return -(weakenScore - 2); // DM controls → mild weaken
+  return 0;
 }
 
 // ---- Analyzers ----

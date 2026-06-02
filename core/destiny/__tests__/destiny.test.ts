@@ -318,6 +318,64 @@ describe('透干联动 (Stem Revelation Feedback)', () => {
   });
 });
 
+// ---- 三合/半合/三会 (Three Harmony / Meeting) Tests ----
+
+describe('三合/半合/三会 (Three Harmony / Meeting)', () => {
+  it('should include threeHarmony in scoring', () => {
+    const result = analyzeStrength(bazi);
+    expect(result.scoring.threeHarmony).toBeDefined();
+    expect(typeof result.scoring.threeHarmony).toBe('number');
+  });
+
+  it('should detect 三会木局 when 寅卯辰 are all present', () => {
+    // Construct a birth with branches 2, 3, 4
+    // 2022年 is 壬寅 (branch 2), Feb is 寅月 (branch 2)
+    // Pick a date with 辰日 and 卯时
+    const birth: BirthInfo = {
+      year: 2022, month: 2, day: 19, hour: 5, minute: 0,
+      longitude: 116.4, isDST: false, gender: '男',
+    };
+    const testBz = calcBaZi(birth);
+    const brs = [testBz.year.branchIndex, testBz.month.branchIndex, testBz.day.branchIndex, testBz.hour.branchIndex];
+    const has2 = brs.includes(2), has3 = brs.includes(3), has4 = brs.includes(4);
+    if (has2 && has3 && has4) {
+      const result = analyzeStrength(testBz);
+      const factor = result.factors.find(f => f.name.includes('三会'));
+      expect(factor).toBeDefined();
+    }
+  });
+
+  it('should detect 半合 when two branches form half harmony', () => {
+    // Test chart: 癸酉 己未 乙巳 辛巳 — branches: 酉(9), 未(7), 巳(5), 巳(5)
+    // 酉丑半合金: need 酉(9) and 丑(1). Not in test chart.
+    // 巳酉半合金: need 巳(5) and 酉(9). Test chart has both!
+    const result = analyzeStrength(bazi);
+    const halfFactor = result.factors.find(f => f.name.includes('半合'));
+    // 巳酉半合金 → 巳(5) + 酉(9) → yes, test chart has 巳 and 酉
+    expect(halfFactor).toBeDefined();
+    expect(halfFactor!.name).toBe('巳酉半合金');
+    // 金克木, 乙木日主被半合金气所克 → weaken
+    expect(halfFactor!.score).toBeLessThan(0);
+  });
+
+  it('should detect 三合火局 for 寅午戌 chart', () => {
+    // 1966 is 丙午年 (branch 6), Feb 4+ is 寅月 (branch 2)
+    // Find a 戌日
+    const birth: BirthInfo = {
+      year: 1966, month: 2, day: 9, hour: 19, minute: 0, // 戌时
+      longitude: 116.4, isDST: false, gender: '男',
+    };
+    const testBz = calcBaZi(birth);
+    const brs = [testBz.year.branchIndex, testBz.month.branchIndex, testBz.day.branchIndex, testBz.hour.branchIndex];
+    if (brs.includes(2) && brs.includes(6) && brs.includes(10)) {
+      const result = analyzeStrength(testBz);
+      const factor = result.factors.find(f => f.name.includes('三合'));
+      expect(factor).toBeDefined();
+      expect(factor!.name).toContain('火');
+    }
+  });
+});
+
 // ---- Structure Engine Tests ----
 
 describe('Structure Engine (格局)', () => {

@@ -92,5 +92,11 @@ export {
   isSelfPunishment,
   isHarm,
   getHarm,
+  THREE_HARMONY_SETS,
+  getHalfHarmony,
+  THREE_MEETING_SETS,
+  isStemClash,
+  getStemClashName,
+  isStemCombine,
 } from './earthlyBranchRelations.js';
 export type { PunishmentType } from './earthlyBranchRelations.js';

@@ -115,3 +115,75 @@ export function getHarm(a: EarthlyBranchIndex, b: EarthlyBranchIndex): { harm: t
   }
   return null;
 }
+
+// ---- 三合局 (Three Harmony Combinations) ----
+
+/** 三合局: three specific branches form a complete harmony, producing a wuxing element. */
+export const THREE_HARMONY_SETS: { branches: [EarthlyBranchIndex, EarthlyBranchIndex, EarthlyBranchIndex]; wuxing: string; name: string }[] = [
+  { branches: [8, 0, 4], wuxing: '水', name: '申子辰三合水局' },   // 申子辰 → 水
+  { branches: [11, 3, 7], wuxing: '木', name: '亥卯未三合木局' },   // 亥卯未 → 木
+  { branches: [2, 6, 10], wuxing: '火', name: '寅午戌三合火局' },   // 寅午戌 → 火
+  { branches: [5, 9, 1], wuxing: '金', name: '巳酉丑三合金局' },    // 巳酉丑 → 金
+];
+
+/** 半合局: two of the three branches in a 三合 (must include the central branch 子/卯/午/酉). */
+export const HALF_HARMONY_PAIRS: Record<string, { wuxing: string; name: string }> = {
+  '0,8': { wuxing: '水', name: '申子半合水' },   // 申子
+  '0,4': { wuxing: '水', name: '子辰半合水' },   // 子辰
+  '3,11': { wuxing: '木', name: '亥卯半合木' },  // 亥卯
+  '3,7': { wuxing: '木', name: '卯未半合木' },   // 卯未
+  '2,6': { wuxing: '火', name: '寅午半合火' },   // 寅午
+  '6,10': { wuxing: '火', name: '午戌半合火' },  // 午戌
+  '5,9': { wuxing: '金', name: '巳酉半合金' },   // 巳酉
+  '1,9': { wuxing: '金', name: '酉丑半合金' },   // 酉丑
+};
+
+export function getHalfHarmony(a: EarthlyBranchIndex, b: EarthlyBranchIndex): { wuxing: string; name: string } | null {
+  const key = [a, b].sort((x, y) => x - y).join(',');
+  return HALF_HARMONY_PAIRS[key] ?? null;
+}
+
+// ---- 三会局 (Three Meetings / Directional Combinations) ----
+
+/** 三会局: three consecutive branches form the strongest directional force. */
+export const THREE_MEETING_SETS: { branches: [EarthlyBranchIndex, EarthlyBranchIndex, EarthlyBranchIndex]; wuxing: string; name: string }[] = [
+  { branches: [2, 3, 4], wuxing: '木', name: '寅卯辰三会木局' },   // 东方木
+  { branches: [5, 6, 7], wuxing: '火', name: '巳午未三会火局' },   // 南方火
+  { branches: [8, 9, 10], wuxing: '金', name: '申酉戌三会金局' },  // 西方金
+  { branches: [11, 0, 1], wuxing: '水', name: '亥子丑三会水局' },  // 北方水
+];
+
+// ---- 天干冲 (Heavenly Stem Clashes) ----
+
+/** 天干相冲: stems 5 positions apart (甲庚/乙辛/丙壬/丁癸). */
+export function isStemClash(a: number, b: number): boolean {
+  // Stems 6 positions apart clash: 甲(0)↔庚(6), 乙(1)↔辛(7), 丙(2)↔壬(8), 丁(3)↔癸(9)
+  return Math.abs(a - b) === 6;
+}
+
+export function getStemClashName(a: number, b: number): string | null {
+  if (!isStemClash(a, b)) return null;
+  const stems = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸'];
+  return `${stems[Math.min(a, b)]}${stems[Math.max(a, b)]}相冲`;
+}
+
+/** 天干五合: 甲己合土/乙庚合金/丙辛合水/丁壬合木/戊癸合火. */
+export function isStemCombine(a: number, b: number): { wuxing: string; name: string } | null {
+  const pairs: Record<number, { partner: number; wuxing: string; name: string }> = {
+    0: { partner: 5, wuxing: '土', name: '甲己合土' },
+    1: { partner: 6, wuxing: '金', name: '乙庚合金' },
+    2: { partner: 7, wuxing: '水', name: '丙辛合水' },
+    3: { partner: 8, wuxing: '木', name: '丁壬合木' },
+    4: { partner: 9, wuxing: '火', name: '戊癸合火' },
+    5: { partner: 0, wuxing: '土', name: '甲己合土' },
+    6: { partner: 1, wuxing: '金', name: '乙庚合金' },
+    7: { partner: 2, wuxing: '水', name: '丙辛合水' },
+    8: { partner: 3, wuxing: '木', name: '丁壬合木' },
+    9: { partner: 4, wuxing: '火', name: '戊癸合火' },
+  };
+  const pair = pairs[a];
+  if (pair && pair.partner === b) {
+    return { wuxing: pair.wuxing, name: pair.name };
+  }
+  return null;
+}

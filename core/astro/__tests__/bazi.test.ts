@@ -23,6 +23,12 @@ import {
   getPunishment,
   isSelfPunishment,
   isHarm,
+  THREE_HARMONY_SETS,
+  getHalfHarmony,
+  THREE_MEETING_SETS,
+  isStemClash,
+  getStemClashName,
+  isStemCombine,
 } from '../index.js';
 import type { BirthInfo } from '../types.js';
 
@@ -460,6 +466,149 @@ describe('Earthly Branch Relations (刑冲合害)', () => {
     it('non-harm pairs should return false', () => {
       expect(isHarm(0, 1)).toBe(false);
     });
+  });
+});
+
+// ---- 三合局 / 半合局 / 三会局 Tests ----
+
+describe('三合局 (Three Harmony)', () => {
+  it('should have 4 three-harmony sets', () => {
+    expect(THREE_HARMONY_SETS.length).toBe(4);
+  });
+
+  it('申子辰 → 三合水局', () => {
+    const set = THREE_HARMONY_SETS.find(s => s.wuxing === '水');
+    expect(set).toBeDefined();
+    expect([...set!.branches].sort((a, b) => a - b)).toEqual([0, 4, 8]);
+    expect(set!.name).toBe('申子辰三合水局');
+  });
+
+  it('亥卯未 → 三合木局', () => {
+    const set = THREE_HARMONY_SETS.find(s => s.wuxing === '木');
+    expect([...set!.branches].sort((a, b) => a - b)).toEqual([3, 7, 11]);
+  });
+
+  it('寅午戌 → 三合火局', () => {
+    const set = THREE_HARMONY_SETS.find(s => s.wuxing === '火');
+    expect([...set!.branches].sort((a, b) => a - b)).toEqual([2, 6, 10]);
+  });
+
+  it('巳酉丑 → 三合金局', () => {
+    const set = THREE_HARMONY_SETS.find(s => s.wuxing === '金');
+    expect([...set!.branches].sort((a, b) => a - b)).toEqual([1, 5, 9]);
+  });
+});
+
+describe('半合局 (Half Harmony)', () => {
+  it('申子半合水 (must include 子)', () => {
+    expect(getHalfHarmony(0, 8)).toEqual({ wuxing: '水', name: '申子半合水' });
+  });
+
+  it('子辰半合水 (must include 子)', () => {
+    expect(getHalfHarmony(0, 4)).toEqual({ wuxing: '水', name: '子辰半合水' });
+  });
+
+  it('亥卯半合木', () => {
+    expect(getHalfHarmony(3, 11)).toEqual({ wuxing: '木', name: '亥卯半合木' });
+  });
+
+  it('卯未半合木', () => {
+    expect(getHalfHarmony(3, 7)).toEqual({ wuxing: '木', name: '卯未半合木' });
+  });
+
+  it('寅午半合火', () => {
+    expect(getHalfHarmony(2, 6)).toEqual({ wuxing: '火', name: '寅午半合火' });
+  });
+
+  it('巳酉半合金', () => {
+    expect(getHalfHarmony(5, 9)).toEqual({ wuxing: '金', name: '巳酉半合金' });
+  });
+
+  it('酉丑半合金', () => {
+    expect(getHalfHarmony(1, 9)).toEqual({ wuxing: '金', name: '酉丑半合金' });
+  });
+
+  it('non-half-harmony pairs should return null', () => {
+    expect(getHalfHarmony(0, 1)).toBeNull();
+    expect(getHalfHarmony(2, 4)).toBeNull();
+  });
+});
+
+describe('三会局 (Three Meetings)', () => {
+  it('should have 4 three-meeting sets', () => {
+    expect(THREE_MEETING_SETS.length).toBe(4);
+  });
+
+  it('寅卯辰 → 三会木局（东方）', () => {
+    const set = THREE_MEETING_SETS.find(s => s.wuxing === '木');
+    expect([...set!.branches].sort((a, b) => a - b)).toEqual([2, 3, 4]);
+    expect(set!.name).toBe('寅卯辰三会木局');
+  });
+
+  it('巳午未 → 三会火局（南方）', () => {
+    const set = THREE_MEETING_SETS.find(s => s.wuxing === '火');
+    expect([...set!.branches].sort((a, b) => a - b)).toEqual([5, 6, 7]);
+  });
+
+  it('申酉戌 → 三会金局（西方）', () => {
+    const set = THREE_MEETING_SETS.find(s => s.wuxing === '金');
+    expect([...set!.branches].sort((a, b) => a - b)).toEqual([8, 9, 10]);
+  });
+
+  it('亥子丑 → 三会水局（北方）', () => {
+    const set = THREE_MEETING_SETS.find(s => s.wuxing === '水');
+    expect([...set!.branches].sort((a, b) => a - b)).toEqual([0, 1, 11]);
+  });
+});
+
+// ---- 天干冲合 Tests ----
+
+describe('天干冲合 (Stem Clash & Combine)', () => {
+  it('甲庚相冲', () => {
+    expect(isStemClash(0, 6)).toBe(true);
+    expect(getStemClashName(0, 6)).toBe('甲庚相冲');
+  });
+
+  it('乙辛相冲', () => {
+    expect(isStemClash(1, 7)).toBe(true);
+  });
+
+  it('丙壬相冲', () => {
+    expect(isStemClash(2, 8)).toBe(true);
+  });
+
+  it('丁癸相冲', () => {
+    expect(isStemClash(3, 9)).toBe(true);
+  });
+
+  it('non-clash stems should return false', () => {
+    expect(isStemClash(0, 1)).toBe(false);
+    expect(isStemClash(4, 5)).toBe(false);
+  });
+
+  it('甲己合土', () => {
+    const result = isStemCombine(0, 5);
+    expect(result).toEqual({ wuxing: '土', name: '甲己合土' });
+  });
+
+  it('乙庚合金', () => {
+    expect(isStemCombine(1, 6)).toEqual({ wuxing: '金', name: '乙庚合金' });
+  });
+
+  it('丙辛合水', () => {
+    expect(isStemCombine(2, 7)).toEqual({ wuxing: '水', name: '丙辛合水' });
+  });
+
+  it('丁壬合木', () => {
+    expect(isStemCombine(3, 8)).toEqual({ wuxing: '木', name: '丁壬合木' });
+  });
+
+  it('戊癸合火', () => {
+    expect(isStemCombine(4, 9)).toEqual({ wuxing: '火', name: '戊癸合火' });
+  });
+
+  it('non-combine stems should return null', () => {
+    expect(isStemCombine(0, 1)).toBeNull();
   });
 });
 
