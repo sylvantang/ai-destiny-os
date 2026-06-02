@@ -13,6 +13,7 @@ import { analyzeStructure } from '../core/destiny/structureEngine.js';
 import { analyzeClimate } from '../core/destiny/climateEngine.js';
 import { analyzeRelations } from '../core/destiny/relationEngine.js';
 import { analyzeFortune } from '../core/destiny/fortuneEngine.js';
+import { deriveYongShen } from '../core/destiny/yongShenEngine.js';
 
 import { analyzePersonality, renderPersonalityProse } from '../ai/personality.js';
 import { analyzeCareer, renderCareerProse } from '../ai/career.js';
@@ -115,8 +116,9 @@ export class DestinyAgent {
     const structure = analyzeStructure(bazi, strength);
     const relations = analyzeRelations(bazi);
     const fortune = analyzeFortune(bazi, strength, structure, climate, relations, dayun, liunian);
+    const yongShen = deriveYongShen(bazi, strength, structure, climate);
 
-    const ctx: PromptContext = { chart, strength, structure, climate, relations, fortune };
+    const ctx: PromptContext = { chart, strength, structure, climate, relations, fortune, yongShen };
 
     const personality = analyzePersonality(ctx);
     const career = analyzeCareer(ctx);

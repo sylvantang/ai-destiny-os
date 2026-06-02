@@ -753,10 +753,11 @@ describe('AI Layer Isolation', () => {
     const dayun = calcDaYun(birth, bazi.month, bazi.year.stemIndex, bazi.day.stemIndex);
     const liunian = calcLiuNian(bazi, 2024, 2026);
     const fortune = analyzeFortune(bazi, strength, structure, climate, relations, dayun, liunian);
+    const yongShen = deriveYongShen(bazi, strength, structure, climate);
 
     const ctx: PromptContext = {
       chart: { bazi, birthInfo: birth, dayun, currentDayun: null, wuxingCount: { '木': 0, '火': 0, '土': 0, '金': 0, '水': 0 }, dayMaster: bazi.day.stem, dayMasterWuxing: bazi.day.stem.wuxing },
-      strength, structure, climate, relations, fortune,
+      strength, structure, climate, relations, fortune, yongShen,
     };
 
     const report = buildReportCard(ctx);
@@ -775,5 +776,6 @@ describe('AI Layer Isolation', () => {
     expect(report.climate).toBeDefined();
     expect(report.relations).toBeDefined();
     expect(report.fortune).toBeDefined();
+    expect(report.yongShen).toBeDefined();
   });
 });

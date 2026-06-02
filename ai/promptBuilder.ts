@@ -10,6 +10,7 @@ import type { StructureResult } from '../core/destiny/structureEngine.js';
 import type { ClimateResult } from '../core/destiny/climateEngine.js';
 import type { RelationResult } from '../core/destiny/relationEngine.js';
 import type { FortuneResult } from '../core/destiny/fortuneEngine.js';
+import type { YongShenResult } from '../core/destiny/yongShenEngine.js';
 
 // ---- Types ----
 
@@ -20,6 +21,7 @@ export interface PromptContext {
   climate: ClimateResult;
   relations: RelationResult;
   fortune: FortuneResult;
+  yongShen: YongShenResult;
 }
 
 export interface AIPrompt {
@@ -100,6 +102,17 @@ export function buildReportCard(ctx: PromptContext): Record<string, unknown> {
       lifePeriods: fortune.lifePeriods.slice(0, 6),
       summary: fortune.summary,
     },
+
+    // 用神引擎 → 喜用神忌神体系
+    yongShen: {
+      yongShen: ctx.yongShen.yongShen,
+      xiShen: ctx.yongShen.xiShen,
+      jiShen: ctx.yongShen.jiShen,
+      chouShen: ctx.yongShen.chouShen,
+      climateYongShen: ctx.yongShen.climateYongShen,
+      analysis: ctx.yongShen.analysis,
+      summary: ctx.yongShen.summary,
+    },
   };
 }
 
@@ -112,6 +125,7 @@ export function buildComprehensivePrompt(ctx: PromptContext): AIPrompt {
   const report = buildReportCard(ctx);
   const s = ctx.strength;
   const st = ctx.structure;
+  const ys = ctx.yongShen;
 
   const userPrompt = `下面是一份已经算好的命理分析报告（JSON格式）。请你把它翻译成一段自然流畅的命理讲解，就像客人坐在你面前，你看着报告跟ta娓娓道来。
 
@@ -123,6 +137,8 @@ ${JSON.stringify(report, null, 2)}
 先聊聊他的日主——${s.dayMaster.stem}${s.dayMaster.wuxing}日主，${s.dayMaster.yinYang}性。这个天干的人天生有什么样的气质。结合五行分布和旺衰（他目前是${s.level}），说说他的性情底色是什么样的。
 
 然后说说格局——他的格局是${st.primaryPattern}${st.subPattern ? '，兼带' + st.subPattern : ''}。这个格局的人做事有什么特点，优势在哪里，需要注意什么。
+
+接着谈谈用神——他的用神是${ys.yongShen.wuxing}（${ys.yongShen.shiShen}），喜神是${ys.xiShen.map(x => x.wuxing).join('、')}，忌神是${ys.jiShen.map(j => j.wuxing).join('、')}。解释一下这对他的生活选择意味着什么——适合什么颜色、什么季节、什么方位发展，应该亲近什么样的人（喜神所代表的），避开什么样的环境和人事（忌神所代表的）。${ys.climateYongShen ? '他的调候用神是' + ys.climateYongShen.wuxing + '，说明命局有特殊的气候需求。' : ''}
 
 接着谈谈十神关系里揭示的人际模式和人生主题。命局中最关键的组合是什么，这些组合如何影响他的事业、财富和感情。
 
@@ -145,6 +161,7 @@ export function buildPersonalityPrompt(ctx: PromptContext): AIPrompt {
   const s = ctx.strength;
   const st = ctx.structure;
   const c = ctx.climate;
+  const ys = ctx.yongShen;
 
   const userPrompt = `下面是一份已经算好的命理分析报告。这位客人想了解自己的性格，请你把相关部分翻译成一段温暖而深刻的人格解读。
 
@@ -155,6 +172,7 @@ ${JSON.stringify(report, null, 2)}
 日主：${s.dayMaster.stem}${s.dayMaster.wuxing}（${s.dayMaster.yinYang}性）
 格局：${st.primaryPattern}${st.subPattern ? '（兼' + st.subPattern + '）' : ''}
 旺衰：${s.level}（${s.strengthScore}分）——${s.levelLabel}
+用神：${ys.yongShen.wuxing}（${ys.yongShen.shiShen}），喜${ys.xiShen.map(x => x.wuxing).join('、')}，忌${ys.jiShen.map(j => j.wuxing).join('、')}
 调候：${c.condition}${c.needsAdjustment ? '，需' + c.neededWuxing : ''}
 
 请围绕以下内容展开，用自然段落表达：
@@ -182,6 +200,7 @@ export function buildCareerPrompt(ctx: PromptContext): AIPrompt {
   const s = ctx.strength;
   const st = ctx.structure;
   const f = ctx.fortune;
+  const ys = ctx.yongShen;
 
   const userPrompt = `下面是一份已经算好的命理分析报告。这位客人想了解自己的事业方向，请你把相关部分翻译成一段实用的职业发展解读。
 
@@ -192,11 +211,12 @@ ${JSON.stringify(report, null, 2)}
 日主：${s.dayMaster.stem}${s.dayMaster.wuxing}（${s.dayMaster.yinYang}性）
 格局：${st.primaryPattern}${st.subPattern ? '（兼' + st.subPattern + '）' : ''}
 旺衰：${s.level}（${s.strengthScore}分）
+用神：${ys.yongShen.wuxing}（${ys.yongShen.shiShen}），喜${ys.xiShen.map(x => x.wuxing).join('、')}，忌${ys.jiShen.map(j => j.wuxing).join('、')}
 当前运势：${f.overall.score}分，${f.overall.level}期——${f.overall.levelLabel}
 
 请围绕以下内容展开，用自然段落表达：
 
-先说这个格局和日主组合，天生适合走哪条路。给几个具体的方向，要接地气，让他一听就能联想到自己能不能干。
+先说这个格局和日主组合，天生适合走哪条路。结合用神${ys.yongShen.wuxing}来给出具体的行业方向——用神所代表的五行对应哪些行业，喜神${ys.xiShen.map(x => x.wuxing).join('、')}又能补充什么方向。给几个具体的方向，要接地气，让他一听就能联想到自己能不能干。
 
 然后分析他的核心竞争力是什么——从十神关系和旺衰分析里能看出他在职场上凭什么吃得开。如果考虑创业，命盘中有没有支持，有几分把握。
 
