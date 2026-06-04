@@ -6,7 +6,7 @@
     "dev": "npm run build:engine && next dev",
     "build": "npm run build:engine && next build",
     "start": "next start",
-    "build:engine": "cd .. && npx tsc",
+    "build:engine": "cd .. && npx -p typescript tsc",
     "lint": "next lint"
   },
   "dependencies": {
