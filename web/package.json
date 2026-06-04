@@ -4,9 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "npm run build:engine && next dev",
-    "build": "npm run build:engine && next build",
+    "build": "next build",
     "start": "next start",
-    "build:engine": "cd .. && npx -p typescript tsc",
+    "build:engine": "cd .. && npx -p typescript@5 tsc",
     "lint": "next lint"
   },
   "dependencies": {

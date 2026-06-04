@@ -1,0 +1,501 @@
+// ============================================================
+// AI Destiny OS — HTTP API Server
+// Zero-dependency: Node.js built-in http only.
+// ============================================================
+import { createServer } from 'node:http';
+import { readFileSync, existsSync } from 'node:fs';
+import { join, extname, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { DestinyAgent } from './agent/agentEngine.js';
+import { createAutoClient } from './agent/llmClient.js';
+import { ALL_STEMS, SEXAGENARY_NAMES } from './core/astro/constants.js';
+import { saveRecord, listRecords, getRecord, deleteRecord, saveAnalysis, getHistory, createSession, getSession, listSessions, deleteSession, addSessionTurn, getSessionTurns, saveFeedback } from './data/database.js';
+import { buildChartPayload } from './ai/chartPayload.js';
+import { buildReportHTML } from './ai/reportHTML.js';
+const ROOT = dirname(fileURLToPath(import.meta.url));
+const PORT = parseInt(process.env['PORT'] ?? '3000', 10);
+const PUBLIC = join(ROOT, 'ui');
+const llm = createAutoClient();
+const MIME = {
+    '.html': 'text/html; charset=utf-8',
+    '.css': 'text/css; charset=utf-8',
+    '.js': 'application/javascript; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+};
+// ---- Helpers ----
+function json(res, data, status = 200) {
+    res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify(data));
+}
+function parseBody(req) {
+    return new Promise((resolve) => {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk.toString()));
+        req.on('end', () => resolve(body));
+    });
+}
+function parseBirth(body) {
+    const y = Number(body['year']);
+    const m = Number(body['month']);
+    const d = Number(body['day']);
+    if (!y || !m || !d)
+        return null;
+    return {
+        year: y,
+        month: m,
+        day: d,
+        hour: Number(body['hour'] ?? 12),
+        minute: Number(body['minute'] ?? 0),
+        longitude: Number(body['longitude'] ?? 116.4),
+        isDST: body['isDST'] === '1' || body['isDST'] === true,
+        gender: (body['gender'] === '女' ? '女' : '男'),
+    };
+}
+// ---- Static Files ----
+function serveStatic(res, url) {
+    const filePath = url === '/' ? join(PUBLIC, 'index.html') : join(PUBLIC, url);
+    if (!existsSync(filePath)) {
+        res.writeHead(404);
+        res.end('Not found');
+        return;
+    }
+    const ext = extname(filePath);
+    const mime = MIME[ext] ?? 'application/octet-stream';
+    const content = readFileSync(filePath, 'utf-8');
+    res.writeHead(200, { 'Content-Type': mime });
+    res.end(content);
+}
+// ---- API Routes ----
+async function handleChart(req, res) {
+    const raw = await parseBody(req);
+    let body;
+    try {
+        body = JSON.parse(raw);
+    }
+    catch {
+        return json(res, { error: 'Invalid JSON' }, 400);
+    }
+    const birth = parseBirth(body);
+    if (!birth)
+        return json(res, { error: 'Missing year/month/day' }, 400);
+    try {
+        const agent = new DestinyAgent(birth, llm ?? undefined);
+        const chart = agent.state.chart;
+        const ctx = agent.state.ctx;
+        const bz = chart.bazi;
+        const pillars = [bz.year, bz.month, bz.day, bz.hour];
+        const firstDayun = chart.dayun[0];
+        const chartPayload = buildChartPayload(agent);
+        // Save to database
+        try {
+            const record = await saveRecord(birth, chartPayload);
+            res.setHeader('X-Record-Id', record.id);
+        }
+        catch { /* DB save is best-effort */ }
+        json(res, {
+            chart: {
+                pillars: pillars.map(p => ({
+                    stem: { name: p.stem.name, wuxing: p.stem.wuxing },
+                    branch: { name: p.branch.name, wuxing: p.branch.wuxing },
+                    hiddenStems: p.hiddenStems.map(idx => ({ name: ALL_STEMS[idx].name, wuxing: ALL_STEMS[idx].wuxing })),
+                    nayin: p.nayin,
+                    shiShen: p.shiShen,
+                    sexagenary: SEXAGENARY_NAMES[p.sexagenaryIndex],
+                })),
+                dayMaster: { name: chart.dayMaster.name, wuxing: chart.dayMasterWuxing },
+                currentDayun: (() => {
+                    if (!chart.currentDayun)
+                        return null;
+                    const cdIdx = chart.dayun.indexOf(chart.currentDayun);
+                    const endAge = cdIdx >= 0 && cdIdx < chart.dayun.length - 1
+                        ? chart.dayun[cdIdx + 1].startAge
+                        : chart.currentDayun.startAge + 10;
+                    return {
+                        pillar: SEXAGENARY_NAMES[chart.currentDayun.pillar.sexagenaryIndex],
+                        startAge: chart.currentDayun.startAge,
+                        endAge,
+                    };
+                })(),
+                startAge: firstDayun?.startAge ?? 0,
+                direction: firstDayun?.direction ?? '',
+                wuxingCounts: chart.wuxingCount,
+                dayun: chart.dayun.slice(0, 8).map((d, i, arr) => ({
+                    pillar: SEXAGENARY_NAMES[d.pillar.sexagenaryIndex],
+                    startAge: d.startAge,
+                    endAge: i < arr.length - 1 ? arr[i + 1].startAge : d.startAge + 10,
+                })),
+                lifePeriods: ctx.fortune.lifePeriods.map(lp => ({
+                    name: lp.name,
+                    ageRange: lp.ageRange,
+                    theme: lp.theme,
+                })),
+            },
+            analysis: {
+                strength: { level: ctx.strength.level, strengthScore: ctx.strength.strengthScore },
+                structure: { primary: ctx.structure.primaryPattern, description: ctx.structure.analysis.join('，') },
+                climate: { needsAdjustment: ctx.climate.needsAdjustment, neededWuxing: ctx.climate.neededWuxing },
+                fortune: {
+                    overall: ctx.fortune.overall,
+                    yearly: ctx.fortune.yearlyAnalysis.slice(0, 8).map(y => ({
+                        year: y.year,
+                        score: Math.round((y.career + y.wealth + y.relationship + y.health) / 4),
+                        career: y.career,
+                        wealth: y.wealth,
+                        relationship: y.relationship,
+                        health: y.health,
+                    })),
+                },
+                personality: {
+                    traits: agent.state.personality.coreTraits,
+                    mbti: agent.state.personality.mbtiTendency,
+                },
+                career: {
+                    industries: agent.state.career.industries.slice(0, 3).map(i => i.industry),
+                    entrepreneurship: agent.state.career.entrepreneurshipScore,
+                },
+            },
+        });
+    }
+    catch (err) {
+        console.error('Chart error:', err instanceof Error ? err.stack : err);
+        json(res, { error: `Chart calculation failed: ${err instanceof Error ? err.message : err}` }, 500);
+    }
+}
+async function handleAsk(req, res) {
+    const raw = await parseBody(req);
+    let body;
+    try {
+        body = JSON.parse(raw);
+    }
+    catch {
+        return json(res, { error: 'Invalid JSON' }, 400);
+    }
+    const birth = parseBirth(body);
+    if (!birth)
+        return json(res, { error: 'Missing year/month/day' }, 400);
+    const question = String(body['question'] ?? '请分析我的命盘');
+    const recordId = Number(body['recordId']) || 0;
+    const sessionId = typeof body['sessionId'] === 'string' ? body['sessionId'] : null;
+    if (!llm) {
+        // No LLM — return deterministic fallback as SSE
+        const agent = new DestinyAgent(birth);
+        const response = agent.processQuery(question);
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream; charset=utf-8',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+        });
+        res.write(`data: ${JSON.stringify({ type: 'chart', ...buildChartPayload(agent) })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: 'token', content: response.text })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: 'done', topic: response.topic, sessionId: sessionId ?? undefined })}\n\n`);
+        res.end();
+        // Persist conversation turn if sessionId provided
+        if (sessionId) {
+            addSessionTurn(sessionId, 'user', question, response.topic).catch(() => { });
+            addSessionTurn(sessionId, 'agent', response.text, response.topic).catch(() => { });
+        }
+        if (recordId) {
+            saveAnalysis(recordId, question, response.text, response.topic).catch(() => { });
+        }
+        return;
+    }
+    const agent = new DestinyAgent(birth, llm);
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+    });
+    // Send chart data first
+    res.write(`data: ${JSON.stringify({ type: 'chart', ...buildChartPayload(agent) })}\n\n`);
+    let fullText = '';
+    let finalTopic = '';
+    // Save user turn if sessionId provided (fire-and-forget)
+    if (sessionId) {
+        addSessionTurn(sessionId, 'user', question).catch(() => { });
+    }
+    // 30-second timeout for LLM streaming
+    const LLM_TIMEOUT_MS = 30000;
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+        timedOut = true;
+    }, LLM_TIMEOUT_MS);
+    try {
+        for await (const event of agent.processQueryStream(question)) {
+            if (timedOut) {
+                // Timeout reached — break loop and use fallback
+                break;
+            }
+            if (event.type === 'token' && event.content) {
+                fullText += event.content;
+                res.write(`data: ${JSON.stringify({ type: 'token', content: event.content })}\n\n`);
+            }
+            else if (event.type === 'done') {
+                finalTopic = event.topic ?? '';
+                res.write(`data: ${JSON.stringify({ type: 'done', topic: event.topic, sessionId: sessionId ?? undefined })}\n\n`);
+            }
+            else if (event.type === 'error') {
+                res.write(`data: ${JSON.stringify({ type: 'error', error: event.error })}\n\n`);
+            }
+        }
+    }
+    catch (err) {
+        res.write(`data: ${JSON.stringify({ type: 'error', error: err instanceof Error ? err.message : 'Unknown' })}\n\n`);
+    }
+    finally {
+        clearTimeout(timeoutId);
+    }
+    // If LLM failed or timed out with no response, provide deterministic fallback
+    if (!fullText.trim()) {
+        const fallback = agent.processQuery(question);
+        fullText = fallback.text;
+        finalTopic = finalTopic || fallback.topic;
+        res.write(`data: ${JSON.stringify({ type: 'status', status: 'fallback' })}\n\n`);
+        // Stream fallback text as simulated tokens for UX consistency
+        const chunks = fallback.text.match(/.{1,6}/g) ?? [fallback.text];
+        for (const chunk of chunks) {
+            res.write(`data: ${JSON.stringify({ type: 'token', content: chunk })}\n\n`);
+        }
+    }
+    res.write(`data: ${JSON.stringify({
+        type: 'done',
+        topic: finalTopic || undefined,
+        sessionId: sessionId ?? undefined,
+        fallback: !fullText.trim() ? true : undefined,
+    })}\n\n`);
+    res.end();
+    // Persist agent turn if sessionId provided (fire-and-forget)
+    if (sessionId && fullText) {
+        addSessionTurn(sessionId, 'agent', fullText, finalTopic || undefined).catch(() => { });
+    }
+    if (recordId && fullText) {
+        saveAnalysis(recordId, question, fullText, finalTopic).catch(() => { });
+    }
+}
+// ---- Record Management ----
+async function handleRecords(_req, res) {
+    try {
+        const records = await listRecords();
+        json(res, records.map(r => ({
+            id: r.id,
+            name: r.name,
+            birthInfo: r.birthInfo,
+            createdAt: r.createdAt,
+        })));
+    }
+    catch {
+        json(res, { error: 'Failed to list records' }, 500);
+    }
+}
+async function handleRecord(req, res, id) {
+    if (req.method === 'DELETE') {
+        try {
+            await deleteRecord(id);
+            json(res, { ok: true });
+        }
+        catch {
+            json(res, { error: 'Failed to delete record' }, 500);
+        }
+        return;
+    }
+    try {
+        const record = await getRecord(id);
+        if (!record)
+            return json(res, { error: 'Record not found' }, 404);
+        json(res, {
+            id: record.id,
+            name: record.name,
+            birthInfo: record.birthInfo,
+            chartData: record.chartData,
+            createdAt: record.createdAt,
+        });
+    }
+    catch {
+        json(res, { error: 'Failed to get record' }, 500);
+    }
+}
+async function handleRecordHistory(_req, res, id) {
+    try {
+        const history = await getHistory(id);
+        json(res, history.map(h => ({
+            id: h.id,
+            question: h.question,
+            response: h.response,
+            topic: h.topic,
+            createdAt: h.createdAt,
+        })));
+    }
+    catch {
+        json(res, { error: 'Failed to get history' }, 500);
+    }
+}
+async function handleReport(req, res) {
+    const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
+    const body = {};
+    url.searchParams.forEach((v, k) => { body[k] = v; });
+    const birth = parseBirth(body);
+    if (!birth) {
+        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end('<h1>Missing year/month/day</h1>');
+        return;
+    }
+    try {
+        const agent = new DestinyAgent(birth, llm ?? undefined);
+        const html = buildReportHTML(agent);
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(html);
+    }
+    catch (err) {
+        res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(`<h1>Report generation failed: ${err instanceof Error ? err.message : err}</h1>`);
+    }
+}
+// ---- Session Management ----
+async function handleCreateSession(req, res) {
+    const raw = await parseBody(req);
+    let body;
+    try {
+        body = JSON.parse(raw);
+    }
+    catch {
+        return json(res, { error: 'Invalid JSON' }, 400);
+    }
+    const birth = parseBirth(body);
+    if (!birth)
+        return json(res, { error: 'Missing year/month/day' }, 400);
+    const sessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const userId = String(body['userId'] ?? `user_${birth.year}${birth.month}${birth.day}`);
+    try {
+        const session = await createSession(sessionId, userId, birth);
+        json(res, { sessionId: session.id, userId: session.userId, createdAt: session.createdAt }, 201);
+    }
+    catch {
+        json(res, { error: 'Failed to create session' }, 500);
+    }
+}
+async function handleListSessions(_req, res) {
+    try {
+        const sessions = await listSessions();
+        json(res, sessions.map(s => ({
+            id: s.id,
+            userId: s.userId,
+            createdAt: s.createdAt,
+            updatedAt: s.updatedAt,
+        })));
+    }
+    catch {
+        json(res, { error: 'Failed to list sessions' }, 500);
+    }
+}
+async function handleGetSession(_req, res, sessionId) {
+    try {
+        const session = await getSession(sessionId);
+        if (!session)
+            return json(res, { error: 'Session not found' }, 404);
+        const turns = await getSessionTurns(sessionId);
+        json(res, {
+            id: session.id,
+            userId: session.userId,
+            birthInfo: JSON.parse(session.birthInfo),
+            createdAt: session.createdAt,
+            updatedAt: session.updatedAt,
+            turns: turns.map(t => ({
+                id: t.id,
+                role: t.role,
+                content: t.content,
+                topic: t.topic,
+                timestamp: t.timestamp,
+            })),
+        });
+    }
+    catch {
+        json(res, { error: 'Failed to get session' }, 500);
+    }
+}
+async function handleDeleteSession(_req, res, sessionId) {
+    try {
+        const session = await getSession(sessionId);
+        if (!session)
+            return json(res, { error: 'Session not found' }, 404);
+        await deleteSession(sessionId);
+        json(res, { ok: true });
+    }
+    catch {
+        json(res, { error: 'Failed to delete session' }, 500);
+    }
+}
+// ---- Feedback ----
+async function handleFeedback(req, res) {
+    const raw = await parseBody(req);
+    let body;
+    try {
+        body = JSON.parse(raw);
+    }
+    catch {
+        return json(res, { error: 'Invalid JSON' }, 400);
+    }
+    const sessionId = body['sessionId'];
+    const rating = body['rating'];
+    const turnId = body['turnId'] ? Number(body['turnId']) : undefined;
+    if (!sessionId || !['up', 'down'].includes(rating)) {
+        return json(res, { error: 'Invalid request' }, 400);
+    }
+    try {
+        const fb = await saveFeedback(sessionId, rating, turnId);
+        json(res, { ok: true, id: fb.id }, 201);
+    }
+    catch {
+        json(res, { error: 'Failed to save feedback' }, 500);
+    }
+}
+// ---- Router ----
+async function handleRequest(req, res) {
+    const url = req.url ?? '/';
+    const method = req.method ?? 'GET';
+    // CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (method === 'OPTIONS') {
+        res.writeHead(204);
+        res.end();
+        return;
+    }
+    if (method === 'POST' && url === '/api/chart')
+        return handleChart(req, res);
+    if (method === 'POST' && url === '/api/feedback')
+        return handleFeedback(req, res);
+    if (method === 'POST' && url === '/api/ask')
+        return handleAsk(req, res);
+    if (method === 'POST' && url === '/api/sessions')
+        return handleCreateSession(req, res);
+    if (method === 'GET' && url === '/api/sessions')
+        return handleListSessions(req, res);
+    if ((method === 'GET' || method === 'POST') && url.startsWith('/api/report'))
+        return handleReport(req, res);
+    // Session routes
+    const sessionMatch = url.match(/^\/api\/sessions\/([a-zA-Z0-9_]+)$/);
+    if (sessionMatch && method === 'GET')
+        return handleGetSession(req, res, sessionMatch[1]);
+    if (sessionMatch && method === 'DELETE')
+        return handleDeleteSession(req, res, sessionMatch[1]);
+    // Record management
+    const recordMatch = url.match(/^\/api\/records\/(\d+)$/);
+    const recordHistoryMatch = url.match(/^\/api\/records\/(\d+)\/history$/);
+    if (method === 'GET' && url === '/api/records')
+        return handleRecords(req, res);
+    if (recordMatch && (method === 'GET' || method === 'DELETE'))
+        return handleRecord(req, res, parseInt(recordMatch[1], 10));
+    if (recordHistoryMatch && method === 'GET')
+        return handleRecordHistory(req, res, parseInt(recordHistoryMatch[1], 10));
+    if (method === 'GET' && (url === '/' || url.startsWith('/ui/')))
+        return serveStatic(res, url);
+    res.writeHead(404);
+    res.end('Not found');
+}
+// ---- Start ----
+const server = createServer(handleRequest);
+server.listen(PORT, () => {
+    console.log(`\n  AI Destiny OS · Web Server`);
+    console.log(`  http://localhost:${PORT}\n`);
+});
+//# sourceMappingURL=server.js.map
