@@ -28,21 +28,26 @@ export async function POST(request: Request) {
 
   const agent = new DestinyAgent(birth);
 
-  // Configure LLM if API key provided
-  if (llmConfig?.apiKey) {
-    try {
-      const { createOpenAIClient, createAnthropicClient } = await import(
-        '@engine/agent/llmClient.js'
-      );
-      let llm: LLMClient | null = null;
+  // Configure LLM: first try request body, then auto-detect from env vars
+  try {
+    const llmModule = await import('@engine/agent/llmClient.js');
+    let llm: LLMClient | null = null;
+
+    if (llmConfig?.apiKey) {
       if (llmConfig.provider === 'anthropic') {
-        llm = createAnthropicClient(llmConfig.apiKey, llmConfig.model);
+        llm = llmModule.createAnthropicClient(llmConfig.apiKey, llmConfig.model);
+      } else if (llmConfig.provider === 'deepseek') {
+        llm = llmModule.createDeepSeekClient(llmConfig.apiKey, llmConfig.model);
       } else {
-        llm = createOpenAIClient(llmConfig.apiKey, llmConfig.model);
+        llm = llmModule.createOpenAIClient(llmConfig.apiKey, llmConfig.model);
       }
-      if (llm) agent.setLLM(llm);
-    } catch { /* best-effort */ }
-  }
+    } else {
+      // Auto-detect from environment variables
+      llm = llmModule.createAutoClient();
+    }
+
+    if (llm) agent.setLLM(llm);
+  } catch { /* best-effort */ }
 
   const encoder = new TextEncoder();
 
