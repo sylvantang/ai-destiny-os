@@ -1,12 +1,13 @@
 // ============================================================
 // AI Destiny OS — Agent Layer: LLM Client
-// Native fetch-based clients for OpenAI and Anthropic APIs.
+// Native fetch-based clients for OpenAI, Anthropic, and DeepSeek APIs.
+// DeepSeek uses OpenAI-compatible format.
 // Supports tool calling (function calling) for the agentic loop.
 // ============================================================
 
 // ---- Types ----
 
-export type LLMProvider = 'openai' | 'anthropic';
+export type LLMProvider = 'openai' | 'anthropic' | 'deepseek';
 
 export interface LLMConfig {
   provider: LLMProvider;
@@ -91,10 +92,11 @@ export class LLMClient {
    * Pass `tools` to enable function calling — the response may include tool_calls.
    */
   async chat(messages: ChatMessage[], tools?: ToolDef[]): Promise<LLMResponse> {
-    if (this.config.provider === 'openai') {
-      return this.callOpenAI(messages, tools);
+    if (this.config.provider === 'anthropic') {
+      return this.callAnthropic(messages, tools);
     }
-    return this.callAnthropic(messages, tools);
+    // OpenAI and DeepSeek both use OpenAI-compatible format
+    return this.callOpenAI(messages, tools);
   }
 
   /**
@@ -102,10 +104,11 @@ export class LLMClient {
    * Note: tools are not supported during streaming. Use chat() for the agentic loop.
    */
   async *stream(messages: ChatMessage[]): AsyncGenerator<LLMStreamEvent> {
-    if (this.config.provider === 'openai') {
-      yield* this.streamOpenAI(messages);
-    } else {
+    if (this.config.provider === 'anthropic') {
       yield* this.streamAnthropic(messages);
+    } else {
+      // OpenAI and DeepSeek both use OpenAI-compatible streaming format
+      yield* this.streamOpenAI(messages);
     }
   }
 
@@ -493,11 +496,29 @@ export function createAnthropicClient(apiKey?: string, model?: string): LLMClien
 }
 
 /**
+ * Create a DeepSeek client from environment variables.
+ * DeepSeek uses OpenAI-compatible API format.
+ * Reads DEEPSEEK_API_KEY, DEEPSEEK_MODEL from process.env.
+ */
+export function createDeepSeekClient(apiKey?: string, model?: string): LLMClient {
+  const key = apiKey ?? process.env['DEEPSEEK_API_KEY'] ?? '';
+  return new LLMClient({
+    provider: 'deepseek',
+    apiKey: key,
+    model: model ?? process.env['DEEPSEEK_MODEL'] ?? 'deepseek-chat',
+    baseURL: process.env['DEEPSEEK_BASE_URL'] ?? 'https://api.deepseek.com',
+  });
+}
+
+/**
  * Auto-detect which provider to use based on available API keys.
  */
 export function createAutoClient(): LLMClient | null {
   const anthropicKey = process.env['ANTHROPIC_API_KEY'] ?? process.env['ANTHROPIC_AUTH_TOKEN'];
   if (anthropicKey) return createAnthropicClient(anthropicKey);
+
+  const deepseekKey = process.env['DEEPSEEK_API_KEY'];
+  if (deepseekKey) return createDeepSeekClient(deepseekKey);
 
   const openaiKey = process.env['OPENAI_API_KEY'];
   if (openaiKey) return createOpenAIClient(openaiKey);

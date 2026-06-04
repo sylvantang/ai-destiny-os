@@ -13,7 +13,7 @@ export type {
 } from './agentEngine.js';
 
 // LLM Client
-export { LLMClient, createOpenAIClient, createAnthropicClient, createAutoClient } from './llmClient.js';
+export { LLMClient, createOpenAIClient, createAnthropicClient, createDeepSeekClient, createAutoClient } from './llmClient.js';
 export type {
   LLMProvider,
   LLMConfig,
