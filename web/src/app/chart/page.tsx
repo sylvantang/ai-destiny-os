@@ -6,13 +6,38 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { BaziChart } from '@/components/BaziChart';
 import { WuXingBalance } from '@/components/WuXingBalance';
-import { Loader2 } from 'lucide-react';
+import { Loader2, CheckCircle } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 
 export default function ChartPage() {
   const [birth, setBirth] = useState<BirthInfo>({ ...defaultBirth });
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState('');
+
+  // Feedback state
+  const [fbRating, setFbRating] = useState<string | null>(null);
+  const [fbComment, setFbComment] = useState('');
+  const [fbSubmitted, setFbSubmitted] = useState(false);
+  const [fbSubmitting, setFbSubmitting] = useState(false);
+
+  const submitFeedback = async () => {
+    if (!fbRating || fbSubmitting) return;
+    setFbSubmitting(true);
+    try {
+      await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: `chart_fb_${Date.now()}`,
+          rating: fbRating,
+          comment: fbComment,
+        }),
+      });
+      setFbSubmitted(true);
+    } catch { /* best-effort */ }
+    setFbSubmitting(false);
+  };
 
   const submit = async () => {
     setLoading(true);
@@ -169,6 +194,59 @@ export default function ChartPage() {
               </Card>
             )}
           </div>
+
+          {/* Feedback form */}
+          <Card className="border-zinc-800">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">这份分析如何？</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {fbSubmitted ? (
+                <div className="flex items-center gap-2 text-sm text-emerald-400">
+                  <CheckCircle className="h-4 w-4" />
+                  感谢反馈！
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    {[
+                      { key: 'good', label: '很准 ✓' },
+                      { key: 'ok', label: '一般' },
+                      { key: 'bad', label: '不准' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.key}
+                        onClick={() => setFbRating(opt.key)}
+                        disabled={fbSubmitting}
+                        className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
+                          fbRating === opt.key
+                            ? 'border-destiny-600 bg-destiny-950/40 text-destiny-400'
+                            : 'border-zinc-700 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <Input
+                    value={fbComment}
+                    onChange={(e) => setFbComment(e.target.value)}
+                    placeholder="哪里最有帮助？（选填）"
+                    disabled={fbSubmitting}
+                    className="h-8 text-sm"
+                  />
+                  <Button
+                    onClick={submitFeedback}
+                    disabled={!fbRating || fbSubmitting}
+                    size="sm"
+                    className="w-full"
+                  >
+                    {fbSubmitting ? '提交中...' : '提交反馈'}
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </>
       )}
     </div>
