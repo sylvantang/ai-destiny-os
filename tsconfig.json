@@ -6,7 +6,7 @@
     "lib": ["ES2022"],
     "types": ["node"],
     "rootDir": ".",
-    "outDir": "dist",
+    "outDir": "web/dist-engine",
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
@@ -29,5 +29,5 @@
     "demo-ask.ts",
     "repl.ts"
   ],
-  "exclude": ["node_modules", "dist", "**/__tests__/**"]
+  "exclude": ["node_modules", "dist", "web", "**/__tests__/**"]
 }

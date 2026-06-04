@@ -28,7 +28,7 @@
         "./src/*"
       ],
       "@engine/*": [
-        "../dist/*"
+        "./dist-engine/*"
       ]
     }
   },
