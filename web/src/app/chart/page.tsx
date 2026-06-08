@@ -278,7 +278,7 @@ function WuXingDonut({ wuxingCounts }: { wuxingCounts: Record<string, number> })
   const total = wuxingOrder.reduce((s, w) => s + (wuxingCounts[w] || 0), 0);
   if (total === 0) return null;
 
-  const cx = 100, cy = 100, outerR = 80, innerR = 45;
+  const cx = 100, cy = 100, outerR = 95, innerR = 60;
   let startAngle = -Math.PI / 2; // start from top
 
   const segments = wuxingOrder.map((wx) => {
@@ -286,7 +286,7 @@ function WuXingDonut({ wuxingCounts }: { wuxingCounts: Record<string, number> })
     const pct = Math.round((count / total) * 100);
     const angle = (count / total) * Math.PI * 2;
     const endAngle = startAngle + angle;
-    const segment = { wx, count, pct, startAngle, endAngle };
+    const segment = { wx, count, pct, startAngle, endAngle, midAngle: (startAngle + endAngle) / 2 };
     startAngle = endAngle;
     return segment;
   });
@@ -305,7 +305,7 @@ function WuXingDonut({ wuxingCounts }: { wuxingCounts: Record<string, number> })
       <CardHeader className="pb-2">
         <CardTitle className="text-base">五行能量分布</CardTitle>
       </CardHeader>
-      <CardContent className="flex justify-center">
+      <CardContent className="flex flex-col items-center gap-3">
         <svg width={200} height={200} viewBox="0 0 200 200">
           {segments.map((seg) => (
             <path
@@ -317,9 +317,32 @@ function WuXingDonut({ wuxingCounts }: { wuxingCounts: Record<string, number> })
               strokeWidth={1.5}
             />
           ))}
-          {/* Center hole covering */}
+          {/* Labels on large segments */}
+          {segments.map((seg) => {
+            if (seg.pct <= 15) return null;
+            const labelR = (innerR + outerR) / 2;
+            const lx = cx + labelR * Math.cos(seg.midAngle);
+            const ly = cy + labelR * Math.sin(seg.midAngle);
+            return (
+              <text key={`lbl-${seg.wx}`} x={lx} y={ly} textAnchor="middle" dominantBaseline="middle" fill="white" fontSize={11} fontWeight={600}>
+                {seg.wx}
+              </text>
+            );
+          })}
+          {/* Center hole */}
           <circle cx={cx} cy={cy} r={innerR} fill="hsl(240 6% 10%)" />
         </svg>
+
+        {/* Legend */}
+        <div className="flex flex-wrap justify-center gap-3 text-xs">
+          {segments.map((seg) => (
+            <div key={`leg-${seg.wx}`} className="flex items-center gap-1">
+              <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: wuxingColors[seg.wx] }} />
+              <span className="text-zinc-400">{seg.wx}</span>
+              <span className="text-zinc-500 tabular-nums">{seg.count}</span>
+            </div>
+          ))}
+        </div>
       </CardContent>
     </Card>
   );
