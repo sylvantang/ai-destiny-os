@@ -117,6 +117,11 @@ export default function ChartPage() {
             </Card>
           )}
 
+          {/* WuXing Donut Chart */}
+          {chart?.wuxingCounts && (
+            <WuXingDonut wuxingCounts={chart.wuxingCounts} />
+          )}
+
           {/* Strength + Structure side by side */}
           <div className="grid grid-cols-2 gap-4">
             <Card>
@@ -261,5 +266,61 @@ function Row({ label, value, highlight }: { label: string; value?: string | null
         {value || '—'}
       </span>
     </div>
+  );
+}
+
+// ---- WuXing Donut Chart ----
+
+const wuxingColors: Record<string, string> = { '木': '#22c55e', '火': '#ef4444', '土': '#eab308', '金': '#a1a1aa', '水': '#3b82f6' };
+const wuxingOrder = ['木', '火', '土', '金', '水'] as const;
+
+function WuXingDonut({ wuxingCounts }: { wuxingCounts: Record<string, number> }) {
+  const total = wuxingOrder.reduce((s, w) => s + (wuxingCounts[w] || 0), 0);
+  if (total === 0) return null;
+
+  const cx = 100, cy = 100, outerR = 80, innerR = 45;
+  let startAngle = -Math.PI / 2; // start from top
+
+  const segments = wuxingOrder.map((wx) => {
+    const count = wuxingCounts[wx] || 0;
+    const pct = Math.round((count / total) * 100);
+    const angle = (count / total) * Math.PI * 2;
+    const endAngle = startAngle + angle;
+    const segment = { wx, count, pct, startAngle, endAngle };
+    startAngle = endAngle;
+    return segment;
+  });
+
+  function arcPath(a1: number, a2: number, r: number): string {
+    const x1 = cx + r * Math.cos(a1);
+    const y1 = cy + r * Math.sin(a1);
+    const x2 = cx + r * Math.cos(a2);
+    const y2 = cy + r * Math.sin(a2);
+    const large = a2 - a1 > Math.PI ? 1 : 0;
+    return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`;
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">五行能量分布</CardTitle>
+      </CardHeader>
+      <CardContent className="flex justify-center">
+        <svg width={200} height={200} viewBox="0 0 200 200">
+          {segments.map((seg) => (
+            <path
+              key={seg.wx}
+              d={`${arcPath(seg.startAngle, seg.endAngle, outerR)} L ${cx + innerR * Math.cos(seg.endAngle)} ${cy + innerR * Math.sin(seg.endAngle)} ${arcPath(seg.endAngle, seg.startAngle, innerR)} Z`}
+              fill={wuxingColors[seg.wx]}
+              opacity={0.85}
+              stroke="hsl(240 6% 10%)"
+              strokeWidth={1.5}
+            />
+          ))}
+          {/* Center hole covering */}
+          <circle cx={cx} cy={cy} r={innerR} fill="hsl(240 6% 10%)" />
+        </svg>
+      </CardContent>
+    </Card>
   );
 }
