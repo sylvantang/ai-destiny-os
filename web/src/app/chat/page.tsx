@@ -81,6 +81,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [status, setStatus] = useState<'idle' | 'thinking' | 'streaming'>('idle');
+  const [mode, setMode] = useState<'quick' | 'detail'>('quick');
   const [chartCtx, setChartCtx] = useState<ChartContext | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [retryMsg, setRetryMsg] = useState<string | null>(null);
@@ -171,6 +172,7 @@ export default function ChatPage() {
           message: text,
           birth: birthToPayload(birth),
           sessionId,
+          mode,
         }),
         signal: controller.signal,
       });
@@ -474,8 +476,34 @@ export default function ChatPage() {
         )}
       </div>
 
-      {/* Input area — pinned to bottom */}
+      {/* Mode toggle + Input area — pinned to bottom */}
       <div className="pt-3 border-t border-[hsl(var(--border))] mt-3">
+        {/* Mode buttons */}
+        <div className="flex gap-2 mb-2">
+          <button
+            onClick={() => setMode('quick')}
+            disabled={status !== 'idle'}
+            className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+              mode === 'quick'
+                ? 'border-destiny-600 bg-destiny-950/40 text-destiny-400'
+                : 'border-zinc-700 text-zinc-400 hover:border-zinc-600'
+            }`}
+          >
+            快速
+          </button>
+          <button
+            onClick={() => setMode('detail')}
+            disabled={status !== 'idle'}
+            className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+              mode === 'detail'
+                ? 'border-destiny-600 bg-destiny-950/40 text-destiny-400'
+                : 'border-zinc-700 text-zinc-400 hover:border-zinc-600'
+            }`}
+          >
+            详细
+          </button>
+        </div>
+
         <div className="flex gap-2">
           <Input
             ref={inputRef}
