@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Compass, MessageCircle, Sparkles } from 'lucide-react';
 
 const features = [
@@ -19,6 +18,12 @@ const features = [
     title: '对话命理师',
     desc: '流式对话，上下文记忆，犹如真人命理师当面指点',
   },
+];
+
+const navCards = [
+  { href: '/chart', title: '排盘', desc: '输入你的出生时间，生成专属八字命盘和AI分析报告' },
+  { href: '/chat', title: '聊天', desc: '和AI命理师对话，问任何关于你命运的问题' },
+  { href: '/compare', title: '合盘', desc: '输入两个人的生日，分析感情和缘分匹配度' },
 ];
 
 export default function HomePage() {
@@ -45,18 +50,43 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* Nav cards — three clickable links */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl mt-16 w-full">
+        {navCards.map((card) => (
+          <Link
+            key={card.href}
+            href={card.href}
+            className="block p-5 rounded-xl border border-zinc-800 bg-zinc-900/60 hover:border-destiny-700 hover:bg-destiny-950/20 transition-all group"
+          >
+            <h3 className="font-semibold text-sm text-zinc-200 group-hover:text-destiny-400 transition-colors">
+              {card.title}
+            </h3>
+            <p className="mt-2 text-xs text-zinc-500 leading-relaxed">
+              {card.desc}
+            </p>
+          </Link>
+        ))}
+      </div>
+
+      {/* Newbie hint */}
+      <div className="mt-3 flex items-center gap-1.5 text-xs text-zinc-500">
+        <span>新手？</span>
+        <Link href="/chart" className="text-destiny-400 hover:text-destiny-300 underline underline-offset-2">
+          从排盘开始
+        </Link>
+        <span>&larr;</span>
+      </div>
+
       {/* Features */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl mt-20 w-full">
         {features.map((f) => (
-          <Card key={f.title} className="border-zinc-800 bg-zinc-900/60">
-            <CardContent className="flex flex-col items-center gap-3 pt-6 pb-5">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 ring-1 ring-zinc-700">
-                <f.icon className="h-5 w-5 text-zinc-300" />
-              </div>
-              <h3 className="font-semibold text-sm text-zinc-200">{f.title}</h3>
-              <p className="text-xs text-zinc-500 leading-relaxed">{f.desc}</p>
-            </CardContent>
-          </Card>
+          <div key={f.title} className="flex flex-col items-center gap-3 px-4 py-5 rounded-xl border border-zinc-800/50">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 ring-1 ring-zinc-700">
+              <f.icon className="h-5 w-5 text-zinc-300" />
+            </div>
+            <h3 className="font-semibold text-sm text-zinc-200">{f.title}</h3>
+            <p className="text-xs text-zinc-500 leading-relaxed">{f.desc}</p>
+          </div>
         ))}
       </div>
 
