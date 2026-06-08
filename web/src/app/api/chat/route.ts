@@ -73,7 +73,7 @@ export async function POST(request: Request) {
 
       // Apply mode to message
       const modeMsg = mode === 'detail'
-        ? `请详细分析：${message}`
+        ? `请详细分析。按以下结构依次展开，每个阶段用自然段落描述：\n1. 童年与成长（0-20岁）\n2. 青年与发展（20-35岁）\n3. 中年与事业（35-50岁）\n4. 晚年与总结（50岁以上）\n5. 当前大运建议\n\n用户问题：${message}`
         : `请用3-5句话简洁回答，不要展开：${message}`;
 
       let fullText = '';
