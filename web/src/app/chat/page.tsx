@@ -5,8 +5,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { BirthForm, birthToPayload, defaultBirth, type BirthInfo } from '../_components/BirthForm';
-import { Send, ChevronDown, ChevronUp, Sparkles, ThumbsUp, ThumbsDown, RefreshCw, AlertTriangle } from 'lucide-react';
-import { stripAnsi } from '@/lib/utils';
+import { SettingsModal } from '@/components/SettingsModal';
+import { Send, ChevronDown, ChevronUp, Sparkles, ThumbsUp, ThumbsDown, RefreshCw, AlertTriangle, Settings } from 'lucide-react';
 
 // ---- Types ----
 
@@ -30,6 +30,15 @@ interface ChartContext {
   xiShen?: string[];
 }
 
+interface ModelConfig {
+  provider: string;
+  model: string;
+  apiKey: string;
+  baseURL: string;
+  temperature: number;
+  systemPrompt: string;
+}
+
 const WUXING_COLORS: Record<string, string> = {
   木: 'text-wood dark:text-green-400',
   火: 'text-fire dark:text-red-400',
@@ -42,6 +51,28 @@ const WUXING_COLORS: Record<string, string> = {
 
 function cn(...classes: (string | boolean | undefined | null)[]) {
   return classes.filter(Boolean).join(' ');
+}
+
+function loadConfig(): ModelConfig | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem('ai-model-config');
+    return raw ? (JSON.parse(raw) as ModelConfig) : null;
+  } catch {
+    return null;
+  }
+}
+
+function formatChartCtx(ctx: ChartContext): string {
+  const parts = [
+    `日主：${ctx.dayMaster.name}${ctx.dayMaster.wuxing}`,
+    `格局：${ctx.pattern}`,
+    `旺衰：${ctx.strength}`,
+    `运势：${ctx.fortune}`,
+  ];
+  if (ctx.yongShen) parts.push(`用神：${ctx.yongShen}`);
+  if (ctx.xiShen && ctx.xiShen.length > 0) parts.push(`喜神：${ctx.xiShen.join('、')}`);
+  return parts.join('，');
 }
 
 // ---- Context-aware suggestions ----
@@ -85,10 +116,12 @@ export default function ChatPage() {
   const [chartCtx, setChartCtx] = useState<ChartContext | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [retryMsg, setRetryMsg] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const turnCounter = useRef(0);
+  const chartCtxRef = useRef<ChartContext | null>(null);
 
   // Create session on first load
   useEffect(() => {
@@ -115,6 +148,32 @@ export default function ChatPage() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // Build (and cache) chart context from /api/chart
+  const buildChartContext = useCallback(async (b: BirthInfo): Promise<string> => {
+    if (chartCtxRef.current) return formatChartCtx(chartCtxRef.current);
+    const res = await fetch('/api/chart', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(birthToPayload(b)),
+    });
+    if (!res.ok) return '';
+    const data = await res.json();
+    const ctx: ChartContext = {
+      dayMaster: {
+        name: data.chart?.dayMaster?.stem ?? '?',
+        wuxing: data.chart?.dayMaster?.wuxing ?? '土',
+      },
+      pattern: data.structure?.pattern ?? '未知',
+      strength: data.strength?.level ?? '未知',
+      fortune: data.fortune?.overall?.level ?? '平稳',
+      yongShen: data.yongShen?.yongShen?.wuxing,
+      xiShen: (data.yongShen?.xiShen ?? []).map((x: { wuxing: string }) => x.wuxing),
+    };
+    chartCtxRef.current = ctx;
+    setChartCtx(ctx);
+    return formatChartCtx(ctx);
+  }, []);
 
   // Submit feedback
   const submitFeedback = useCallback(async (msgIndex: number, rating: 'up' | 'down') => {
@@ -165,21 +224,34 @@ export default function ChatPage() {
     abortRef.current = controller;
 
     try {
+      const config = loadConfig();
+      const hasKey = Boolean(config?.apiKey);
+      const chartText = await buildChartContext(birth);
+      const userText = mode === 'detail'
+        ? `请详细分析。按以下结构依次展开：\n1. 童年与成长（0-20岁）\n2. 青年与发展（20-35岁）\n3. 中年与事业（35-50岁）\n4. 晚年与总结（50岁以上）\n5. 当前大运建议\n\n用户问题：${text}`
+        : text;
+
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: text,
+          messages: [
+            { role: 'system', content: chartText },
+            { role: 'user', content: userText },
+          ],
           birth: birthToPayload(birth),
-          sessionId,
-          mode,
+          userConfig: config || {},
         }),
         signal: controller.signal,
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: 'Request failed' }));
-        throw new Error(err.error || `HTTP ${res.status}`);
+        let errMsg = `HTTP ${res.status}`;
+        try {
+          const err = await res.json();
+          if (err && typeof err.error === 'string') errMsg = err.error;
+        } catch { /* ignore */ }
+        throw new Error(errMsg);
       }
 
       const reader = res.body?.getReader();
@@ -201,58 +273,32 @@ export default function ChatPage() {
           const trimmed = line.trim();
           if (!trimmed.startsWith('data: ')) continue;
           const raw = trimmed.slice(6);
+          if (raw === '[DONE]') continue;
 
           try {
-            const event = JSON.parse(raw);
-
-            if (event.type === 'chart') {
-              setChartCtx(event);
-            } else if (event.type === 'status') {
-              if (event.status === 'thinking') {
-                setStatus('thinking');
-              } else if (event.status === 'fallback') {
-                setMessages((prev) => {
-                  const updated = [...prev];
-                  const last = updated[updated.length - 1];
-                  if (last && last.role === 'agent' && last.isStreaming) {
-                    last.isFallback = true;
-                    last.text = '';
-                  }
-                  return updated;
-                });
-              }
-            } else if (event.type === 'token') {
+            const ev = JSON.parse(raw);
+            if (ev.type === 'text-delta' && typeof ev.delta === 'string') {
               setStatus('streaming');
               setMessages((prev) => {
                 const updated = [...prev];
                 const last = updated[updated.length - 1];
                 if (last && last.role === 'agent' && last.isStreaming) {
-                  last.text += stripAnsi(event.content);
+                  last.text += ev.delta;
                 }
                 return updated;
               });
-            } else if (event.type === 'done') {
+            } else if (ev.type === 'finish') {
               setStatus('idle');
               setMessages((prev) => {
                 const updated = [...prev];
                 const last = updated[updated.length - 1];
                 if (last && last.role === 'agent' && last.isStreaming) {
                   last.isStreaming = false;
-                  last.topic = event.topic;
-                  if (event.fallback) last.isFallback = true;
                 }
                 return updated;
               });
-            } else if (event.type === 'error') {
+            } else if (ev.type === 'error') {
               hadError = true;
-              setMessages((prev) => {
-                const updated = [...prev];
-                const last = updated[updated.length - 1];
-                if (last && last.role === 'agent' && last.isStreaming) {
-                  last.hasError = true;
-                }
-                return updated;
-              });
             }
           } catch {
             // Skip unparseable chunks
@@ -260,28 +306,28 @@ export default function ChatPage() {
         }
       }
 
-      // If stream ended with error and no text, show retry
-      if (hadError) {
-        setMessages((prev) => {
-          const updated = [...prev];
-          const last = updated[updated.length - 1];
-          if (last && last.role === 'agent' && !last.text.trim()) {
-            last.text = '连接出现问题，请重试';
-            last.isStreaming = false;
-            last.hasError = true;
-          }
-          return updated;
-        });
-        setRetryMsg(text);
-      }
-    } catch (err: any) {
-      if (err.name === 'AbortError') return;
       setStatus('idle');
       setMessages((prev) => {
         const updated = [...prev];
         const last = updated[updated.length - 1];
         if (last && last.role === 'agent' && last.isStreaming) {
-          last.text = `连接失败: ${err.message}`;
+          last.isStreaming = false;
+          if (hadError && !last.text.trim()) {
+            last.text = hasKey ? '连接出现问题，请重试' : '请点击右上角设置按钮配置 API Key 后再提问';
+            last.hasError = true;
+          }
+        }
+        return updated;
+      });
+      if (hadError) setRetryMsg(text);
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      setStatus('idle');
+      setMessages((prev) => {
+        const updated = [...prev];
+        const last = updated[updated.length - 1];
+        if (last && last.role === 'agent' && last.isStreaming) {
+          last.text = `连接失败: ${err instanceof Error ? err.message : String(err)}`;
           last.isStreaming = false;
           last.hasError = true;
         }
@@ -289,7 +335,7 @@ export default function ChatPage() {
       });
       setRetryMsg(text);
     }
-  }, [input, status, birth, sessionId]);
+  }, [input, status, birth, mode, buildChartContext]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -398,14 +444,6 @@ export default function ChatPage() {
                   </div>
                 )}
 
-                {/* Fallback notice */}
-                {m.role === 'agent' && m.isFallback && !m.isStreaming && (
-                  <div className="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-lg bg-amber-950/30 border border-amber-800/40 text-amber-400 text-xs">
-                    <AlertTriangle className="h-3 w-3" />
-                    <span>AI 顾问正在冥想，以下为基础引擎生成的报告</span>
-                  </div>
-                )}
-
                 {/* Error notice with retry */}
                 {m.role === 'agent' && m.hasError && !m.isStreaming && (
                   <div className="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-lg bg-red-950/30 border border-red-800/40 text-red-400 text-xs">
@@ -478,8 +516,8 @@ export default function ChatPage() {
 
       {/* Mode toggle + Input area — pinned to bottom */}
       <div className="pt-3 border-t border-[hsl(var(--border))] mt-3">
-        {/* Mode buttons */}
-        <div className="flex gap-2 mb-2">
+        {/* Mode buttons + settings */}
+        <div className="flex items-center gap-2 mb-2">
           <button
             onClick={() => setMode('quick')}
             disabled={status !== 'idle'}
@@ -501,6 +539,13 @@ export default function ChatPage() {
             }`}
           >
             详细
+          </button>
+          <button
+            onClick={() => setShowSettings(true)}
+            title="模型设置"
+            className="ml-auto p-1.5 rounded-full border border-zinc-700 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 transition-colors"
+          >
+            <Settings className="h-4 w-4" />
           </button>
         </div>
 
@@ -528,6 +573,8 @@ export default function ChatPage() {
           AI 命理分析仅供参考，不构成人生决策依据
         </p>
       </div>
+
+      <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
     </div>
   );
 }

@@ -1,160 +1,42 @@
-import type { BirthInfo } from '@engine/core/astro/types.js';
-import { DestinyAgent } from '@engine/agent/agentEngine.js';
-import type { LLMClient } from '@engine/agent/llmClient.js';
+import { streamText } from 'ai';
+import { getModel, PROVIDER_MODELS, type Provider } from '@/lib/ai/model-router';
+import { retrieveAncientTexts, formatRAGContext } from '@/lib/rag/ancient-texts';
 
-const LLM_TIMEOUT_MS = 30000; // 30-second timeout for LLM agentic loop
+const DEFAULT_SYSTEM = `你是专业八字命理师。严格依据《穷通宝鉴》《滴天髓》《三命通会》《渊海子平》原文解读。引用格式：《来源》"原文片段"。`;
 
-export async function POST(request: Request) {
-  const body = await request.json().catch(() => ({}));
-  const { message, birth: birthInfo, sessionId, llm: llmConfig, mode } = body;
-
-  if (!message || !birthInfo) {
-    return new Response(JSON.stringify({ error: 'Missing "message" or "birth"' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  const birth: BirthInfo = {
-    year: birthInfo.year,
-    month: birthInfo.month,
-    day: birthInfo.day,
-    hour: birthInfo.hour,
-    minute: birthInfo.minute ?? 0,
-    longitude: birthInfo.longitude ?? 116.4,
-    isDST: birthInfo.isDST ?? false,
-    gender: birthInfo.gender ?? '男',
-  };
-
-  const agent = new DestinyAgent(birth);
-
-  // Configure LLM: first try request body, then auto-detect from env vars
+export async function POST(req: Request) {
   try {
-    const llmModule = await import('@engine/agent/llmClient.js');
-    let llm: LLMClient | null = null;
+    const body = await req.json() as Record<string, unknown>;
+    const messages = body.messages as { role: string; content: string }[];
+    const userConfig = body.userConfig as Record<string, unknown> | undefined;
+    if (!messages?.length) return new Response(JSON.stringify({ error: 'Missing messages' }), { status: 400 });
 
-    if (llmConfig?.apiKey) {
-      if (llmConfig.provider === 'anthropic') {
-        llm = llmModule.createAnthropicClient(llmConfig.apiKey, llmConfig.model);
-      } else if (llmConfig.provider === 'deepseek') {
-        llm = llmModule.createDeepSeekClient(llmConfig.apiKey, llmConfig.model);
-      } else {
-        llm = llmModule.createOpenAIClient(llmConfig.apiKey, llmConfig.model);
-      }
-    } else {
-      // Auto-detect from environment variables
-      llm = llmModule.createAutoClient();
-    }
+    const lastUser = [...messages].reverse().find((m) => m.role === 'user')?.content || '';
+    const chartCtx = messages.find((m) => m.role === 'system' && m.content.includes('日主'))?.content || '';
+    const refs = retrieveAncientTexts(lastUser, 5);
 
-    if (llm) agent.setLLM(llm);
-  } catch { /* best-effort */ }
+    const provider = (userConfig?.provider as Provider) || 'deepseek';
+    const model = (userConfig?.model as string) || 'deepseek-chat';
+    const apiKey = (userConfig?.apiKey as string) || process.env.DEEPSEEK_API_KEY || '';
+    const baseURL = userConfig?.baseURL as string | undefined;
+    const temperature = Number(userConfig?.temperature ?? 0.7);
 
-  const encoder = new TextEncoder();
+    const system = `${(userConfig?.systemPrompt as string) || DEFAULT_SYSTEM}\n\n【古籍参考】\n${formatRAGContext(refs)}\n\n【命盘】\n${chartCtx}`;
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      const send = (data: Record<string, unknown>) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
-      };
+    const result = streamText({
+      model: getModel(provider, model, apiKey, baseURL),
+      system,
+      messages: messages.map((m) => ({ role: m.role as 'user' | 'assistant' | 'system', content: m.content })),
+      temperature,
+      maxTokens: 4000
+    });
+    return result.toDataStreamResponse();
+  } catch (err) {
+    return new Response(JSON.stringify({ error: err instanceof Error ? err.message : 'Unknown error' }), { status: 500 });
+  }
+}
 
-      // Send initial chart context (with yongShen for context-aware suggestions)
-      const ctx = agent.state.ctx;
-      send({
-        type: 'chart',
-        dayMaster: { name: ctx.chart.dayMaster.name, wuxing: ctx.chart.dayMasterWuxing },
-        pattern: ctx.structure.primaryPattern,
-        strength: ctx.strength.level,
-        fortune: ctx.fortune.overall.level,
-        yongShen: ctx.yongShen.yongShen.wuxing,
-        xiShen: ctx.yongShen.xiShen.map((x) => x.wuxing),
-      });
-
-      send({ type: 'status', status: 'thinking' });
-
-      // Apply mode to message
-      const modeMsg = mode === 'detail'
-        ? `请详细分析。按以下结构依次展开，每个阶段用自然段落描述：\n1. 童年与成长（0-20岁）\n2. 青年与发展（20-35岁）\n3. 中年与事业（35-50岁）\n4. 晚年与总结（50岁以上）\n5. 当前大运建议\n\n用户问题：${message}`
-        : `请用3-5句话简洁回答，不要展开：${message}`;
-
-      let fullText = '';
-      let finalTopic = '';
-      let timedOut = false;
-      const timeoutId = setTimeout(() => { timedOut = true; }, LLM_TIMEOUT_MS);
-
-      try {
-        for await (const event of agent.processQueryStream(modeMsg)) {
-          if (timedOut) break;
-          if (event.type === 'token' && event.content) {
-            fullText += event.content;
-            send({ type: 'token', content: event.content });
-          } else if (event.type === 'done') {
-            finalTopic = event.topic ?? '';
-            send({ type: 'done', topic: event.topic, sessionId });
-          } else if (event.type === 'error') {
-            send({ type: 'error', error: event.error });
-          }
-        }
-
-        // Timeout or error with no response → deterministic fallback
-        if (!fullText.trim()) {
-          const fallback = agent.processQuery(modeMsg);
-          fullText = fallback.text;
-          finalTopic = finalTopic || fallback.topic;
-          send({ type: 'status', status: 'fallback' });
-          // Simulate streaming for UX consistency
-          const chunks = fallback.text.match(/.{1,6}/g) ?? [fallback.text];
-          for (const chunk of chunks) {
-            send({ type: 'token', content: chunk });
-          }
-        }
-
-        send({
-          type: 'done',
-          topic: finalTopic || undefined,
-          sessionId,
-          fallback: !fullText.trim() ? true : undefined,
-        });
-      } catch (err) {
-        send({
-          type: 'error',
-          error: err instanceof Error ? err.message : 'Unknown error',
-        });
-
-        // Provide fallback on error
-        try {
-          const fallback = agent.processQuery(modeMsg);
-          send({ type: 'status', status: 'fallback' });
-          const chunks = fallback.text.match(/.{1,6}/g) ?? [fallback.text];
-          for (const chunk of chunks) {
-            send({ type: 'token', content: chunk });
-          }
-          send({ type: 'done', topic: fallback.topic, sessionId, fallback: true });
-        } catch {
-          send({ type: 'done', sessionId, fallback: true });
-        }
-      } finally {
-        clearTimeout(timeoutId);
-
-        // Persist turn if sessionId provided (fire-and-forget)
-        if (sessionId && fullText) {
-          try {
-            const { addSessionTurn } = await import('@engine/data/database.js');
-            addSessionTurn(sessionId, 'user', message).catch(() => {});
-            addSessionTurn(sessionId, 'agent', fullText).catch(() => {});
-          } catch { /* best-effort */ }
-        }
-
-        controller.close();
-      }
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no',
-    },
-  });
+export async function GET(req: Request) {
+  const provider = new URL(req.url).searchParams.get('provider') as Provider;
+  return Response.json({ models: PROVIDER_MODELS[provider] || [] });
 }
