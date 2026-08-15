@@ -1,7 +1,8 @@
 // ============================================================
 // AI Destiny OS — RAG: ancient classics retrieval (MiniSearch).
 // Chinese tokenization: character bigrams + single characters,
-// plus latin words. Export signatures unchanged; reindex() added.
+// plus latin words. Unverified corpus entries are down-weighted
+// (score × 0.5) and tagged [待核实] in the context block.
 // ============================================================
 
 import MiniSearch from 'minisearch';
@@ -12,6 +13,7 @@ export interface AncientRef {
   chapter: string;
   content: string;
   tags: string[];
+  verified: boolean;
 }
 
 interface AncientDoc extends AncientRef {
@@ -20,7 +22,7 @@ interface AncientDoc extends AncientRef {
 
 const docs = ancientTexts as AncientRef[];
 
-/** Chinese bigrams + single chars + latin words, space-separated. */
+/** Chinese bigrams + single chars + latin words. */
 function tokenize(text: string): string[] {
   const tokens: string[] = [];
 
@@ -45,7 +47,7 @@ let miniSearch: MiniSearch<AncientDoc> | null = null;
 export function reindex(): void {
   miniSearch = new MiniSearch<AncientDoc>({
     fields: ['content', 'chapter', 'source'],
-    storeFields: ['source', 'chapter', 'content', 'tags'],
+    storeFields: ['source', 'chapter', 'content', 'tags', 'verified'],
     tokenize,
     searchOptions: {
       prefix: true,
@@ -67,15 +69,30 @@ export function retrieveAncientTexts(query: string, topK = 5): AncientRef[] {
     ms = miniSearch;
   }
   if (!ms) return [];
+
+  // Fetch more candidates, then re-rank with the audit weight.
   const results = ms.search(query, { prefix: true, fuzzy: 0.2 });
-  return results.slice(0, topK).map((r) => ({
-    source: r.source,
-    chapter: r.chapter,
-    content: r.content,
-    tags: r.tags,
+  const candidates = results.slice(0, Math.max(topK * 4, 20));
+
+  const ranked = candidates
+    .map((r) => ({
+      score: r.score * (r.verified ? 1 : 0.5),
+      ref: r,
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topK);
+
+  return ranked.map(({ ref }) => ({
+    source: ref.source,
+    chapter: ref.chapter,
+    content: ref.content,
+    tags: ref.tags,
+    verified: ref.verified,
   }));
 }
 
 export function formatRAGContext(refs: AncientRef[]): string {
-  return refs.map((r) => `[${r.source}·${r.chapter}] ${r.content}`).join('\n\n');
+  return refs
+    .map((r) => `${r.verified ? '' : '[待核实]'}[${r.source}·${r.chapter}] ${r.content}`)
+    .join('\n\n');
 }
