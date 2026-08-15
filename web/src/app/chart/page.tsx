@@ -6,13 +6,45 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { BaziChart } from '@/components/BaziChart';
 import { WuXingBalance } from '@/components/WuXingBalance';
+import { WuxingRadar } from '@/components/WuxingRadar';
+import { DayunTimeline } from '@/components/DayunTimeline';
 import { Loader2, CheckCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+
+interface ChartApiPillar {
+  stem: { name: string; wuxing: string; yinYang?: string };
+  branch: { name: string; wuxing: string };
+  shiShen?: string;
+  nayin?: string;
+  hiddenStems?: { name: string; wuxing: string }[];
+}
+
+interface ChartApiResult {
+  chart?: {
+    pillars: Record<'year' | 'month' | 'day' | 'hour', ChartApiPillar>;
+    pillarLabels?: Record<string, string>;
+    dayMaster: { stem: string; wuxing: string };
+    wuxingCounts?: Record<string, number>;
+  };
+  strength?: { score?: number; level?: string; label?: string; summary?: string };
+  structure?: { pattern?: string; subPattern?: string; shiShen?: string; isFavorable?: boolean };
+  yongShen?: {
+    yongShen?: { wuxing: string };
+    xiShen?: { wuxing: string }[];
+    jiShen?: { wuxing: string }[];
+    summary?: string;
+  };
+  fortune?: {
+    overall?: { score?: number; level?: string; bestDimension?: string };
+    lifePeriods?: { startAge: number; pillar: string; years: number[]; summary: string }[];
+  };
+  climate?: { needsAdjustment?: boolean; neededWuxing?: string; condition?: string };
+}
 
 export default function ChartPage() {
   const [birth, setBirth] = useState<BirthInfo>({ ...defaultBirth });
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<ChartApiResult | null>(null);
   const [error, setError] = useState('');
 
   // Feedback state
@@ -52,8 +84,8 @@ export default function ChartPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '请求失败');
       setResult(data);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
@@ -100,7 +132,7 @@ export default function ChartPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <BaziChart data={chart} />
+              {chart && <BaziChart data={chart} />}
             </CardContent>
           </Card>
 
@@ -120,6 +152,19 @@ export default function ChartPage() {
           {/* WuXing Donut Chart */}
           {chart?.wuxingCounts && (
             <WuXingDonut wuxingCounts={chart.wuxingCounts} />
+          )}
+
+          {/* WuXing Radar */}
+          {chart?.wuxingCounts && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">五行能量雷达</CardTitle>
+                <CardDescription>五行能量分布雷达图</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <WuxingRadar scores={chart.wuxingCounts} />
+              </CardContent>
+            </Card>
           )}
 
           {/* Strength + Structure side by side */}
@@ -161,11 +206,11 @@ export default function ChartPage() {
                 <Row label="用神" value={yongShen?.yongShen?.wuxing} highlight />
                 <Row
                   label="喜神"
-                  value={yongShen?.xiShen?.map((x: any) => x.wuxing).join('、')}
+                  value={yongShen?.xiShen?.map((x: { wuxing: string }) => x.wuxing).join('、')}
                 />
                 <Row
                   label="忌神"
-                  value={yongShen?.jiShen?.map((x: any) => x.wuxing).join('、')}
+                  value={yongShen?.jiShen?.map((x: { wuxing: string }) => x.wuxing).join('、')}
                 />
               </CardContent>
             </Card>
@@ -199,6 +244,22 @@ export default function ChartPage() {
               </Card>
             )}
           </div>
+
+          {/* DaYun Timeline */}
+          {fortune && fortune.lifePeriods && fortune.lifePeriods.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">大运走势</CardTitle>
+                <CardDescription>十年一步大运，滑动查看</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <DayunTimeline
+                  periods={fortune.lifePeriods}
+                  currentAge={new Date().getFullYear() - birth.year}
+                />
+              </CardContent>
+            </Card>
+          )}
 
           {/* Feedback form */}
           <Card className="border-zinc-800">
