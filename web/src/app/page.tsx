@@ -1,99 +1,387 @@
-import Link from 'next/link';
+'use client';
+
+import { useState, useRef, useEffect } from 'react';
+import { BirthForm, birthToPayload, defaultBirth, type BirthInfo } from './_components/BirthForm';
+import { BaziChart } from '@/components/BaziChart';
+import { WuxingRadar } from '@/components/WuxingRadar';
+import { DayunTimeline } from '@/components/DayunTimeline';
+import { SettingsModal } from '@/components/SettingsModal';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Compass, MessageCircle, Sparkles } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Loader2, Settings, Send, ChevronDown, ChevronUp } from 'lucide-react';
 
-const features = [
-  {
-    icon: Compass,
-    title: '排盘精准',
-    desc: '真太阳时校正，节气定月柱，1900年至今无误差',
-  },
-  {
-    icon: Sparkles,
-    title: 'AI 解读',
-    desc: '旺衰、格局、用神、调候，多维引擎 + 大模型翻译',
-  },
-  {
-    icon: MessageCircle,
-    title: '对话命理师',
-    desc: '流式对话，上下文记忆，犹如真人命理师当面指点',
-  },
-];
+// ---- API result types (mirror /api/chart response) ----
 
-const navCards = [
-  { href: '/chart', title: '排盘', desc: '输入你的出生时间，生成专属八字命盘和AI分析报告' },
-  { href: '/chat', title: '聊天', desc: '和AI命理师对话，问任何关于你命运的问题' },
-  { href: '/compare', title: '合盘', desc: '输入两个人的生日，分析感情和缘分匹配度' },
-];
+interface ChartApiPillar {
+  stem: { name: string; wuxing: string; yinYang?: string };
+  branch: { name: string; wuxing: string };
+  shiShen?: string;
+  nayin?: string;
+  hiddenStems?: { name: string; wuxing: string }[];
+}
+
+interface ChartApiResult {
+  chart?: {
+    pillars: Record<'year' | 'month' | 'day' | 'hour', ChartApiPillar>;
+    pillarLabels?: Record<string, string>;
+    dayMaster: { stem: string; wuxing: string };
+    wuxingCounts?: Record<string, number>;
+  };
+  strength?: { score?: number; level?: string; label?: string; summary?: string };
+  structure?: { pattern?: string; subPattern?: string; shiShen?: string; isFavorable?: boolean };
+  yongShen?: {
+    yongShen?: { wuxing: string };
+    xiShen?: { wuxing: string }[];
+    jiShen?: { wuxing: string }[];
+    summary?: string;
+  };
+  fortune?: {
+    overall?: { score?: number; level?: string; bestDimension?: string };
+    lifePeriods?: { startAge: number; pillar: string; years: number[]; summary: string }[];
+  };
+  climate?: { needsAdjustment?: boolean; neededWuxing?: string; condition?: string };
+  visualization?: string;
+}
+
+interface ChatMessage {
+  role: 'user' | 'agent';
+  text: string;
+  streaming?: boolean;
+}
+
+function chartContextText(r: ChartApiResult): string {
+  const parts = [
+    `日主：${r.chart?.dayMaster?.stem || ''}${r.chart?.dayMaster?.wuxing || ''}`,
+    `格局：${r.structure?.pattern || ''}`,
+    `旺衰：${r.strength?.level || ''}`,
+    `用神：${r.yongShen?.yongShen?.wuxing || ''}`,
+    `喜神：${(r.yongShen?.xiShen || []).map((x) => x.wuxing).join('、')}`,
+    `大运：${(r.fortune?.lifePeriods || []).slice(0, 3).map((p) => p.pillar).join(' → ')}`,
+  ];
+  return parts.join('，');
+}
 
 export default function HomePage() {
+  const [birth, setBirth] = useState<BirthInfo>({ ...defaultBirth });
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<ChartApiResult | null>(null);
+  const [error, setError] = useState('');
+  const [showChat, setShowChat] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatBusy, setChatBusy] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const resultsRef = useRef<HTMLDivElement>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to results after charting
+  useEffect(() => {
+    if (result && resultsRef.current) {
+      resultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [result]);
+
+  // Auto-scroll chat to bottom
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages]);
+
+  const submit = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/chart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(birthToPayload(birth)),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '请求失败');
+      setResult(data);
+      setShowChat(false);
+      setChatMessages([]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const sendChat = async () => {
+    const text = chatInput.trim();
+    if (!text || chatBusy || !result) return;
+    setChatInput('');
+    setChatMessages((prev) => [
+      ...prev,
+      { role: 'user', text },
+      { role: 'agent', text: '', streaming: true },
+    ]);
+    setChatBusy(true);
+
+    let config: Record<string, unknown> = {};
+    try {
+      const saved = localStorage.getItem('ai-model-config');
+      if (saved) config = JSON.parse(saved) as Record<string, unknown>;
+    } catch {
+      /* ignore corrupted config */
+    }
+
+    const controller = new AbortController();
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [
+            { role: 'system', content: chartContextText(result) },
+            { role: 'user', content: text },
+          ],
+          birth: birthToPayload(birth),
+          userConfig: config,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try {
+          const err = await res.json();
+          if (err && typeof err.error === 'string') msg = err.error;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(msg);
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error('No response body');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let failed = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data: ')) continue;
+          const raw = trimmed.slice(6);
+          if (raw === '[DONE]') continue;
+          try {
+            const ev = JSON.parse(raw);
+            if (ev.type === 'text-delta' && typeof ev.delta === 'string') {
+              setChatMessages((prev) => {
+                const updated = [...prev];
+                const last = updated[updated.length - 1];
+                if (last && last.role === 'agent' && last.streaming) {
+                  last.text += ev.delta;
+                }
+                return updated;
+              });
+            } else if (ev.type === 'error') {
+              failed = true;
+            }
+          } catch {
+            /* skip unparseable chunks */
+          }
+        }
+      }
+
+      setChatMessages((prev) => {
+        const updated = [...prev];
+        const last = updated[updated.length - 1];
+        if (last && last.role === 'agent' && last.streaming) {
+          last.streaming = false;
+          if (failed && !last.text.trim()) last.text = '连接出现问题，请重试';
+        }
+        return updated;
+      });
+    } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') return;
+      setChatMessages((prev) => {
+        const updated = [...prev];
+        const last = updated[updated.length - 1];
+        if (last && last.role === 'agent' && last.streaming) {
+          last.streaming = false;
+          last.text = `连接失败: ${e instanceof Error ? e.message : String(e)}`;
+        }
+        return updated;
+      });
+    } finally {
+      setChatBusy(false);
+    }
+  };
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] text-center px-4">
-      {/* Hero */}
-      <div className="max-w-2xl space-y-6">
-        <h1 className="text-5xl font-extrabold tracking-tight text-white sm:text-6xl">
-          AI Destiny OS
-        </h1>
-        <p className="text-lg text-zinc-400 leading-relaxed max-w-lg mx-auto">
-          基于千年命理算法的八字分析引擎，结合大语言模型，
-          <br />
-          为你解读命运的密码
-        </p>
-
-        {/* CTA */}
-        <div className="pt-4">
-          <Link href="/chart">
-            <Button size="lg" className="h-12 px-8 text-base cursor-pointer">
-              开始分析命盘
-            </Button>
-          </Link>
+    <div className="space-y-4 max-w-2xl mx-auto">
+      {/* Header + settings gear */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">AI Destiny OS</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">基于千年命理算法的八字分析引擎，为你解读命运的密码</p>
         </div>
+        <button
+          onClick={() => setShowSettings(true)}
+          title="模型设置"
+          className="p-2 rounded-full border border-zinc-700 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 transition-colors"
+        >
+          <Settings className="h-4 w-4" />
+        </button>
       </div>
 
-      {/* Nav cards — three clickable links */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl mt-16 w-full">
-        {navCards.map((card) => (
-          <Link
-            key={card.href}
-            href={card.href}
-            className="block p-5 rounded-xl border border-zinc-800 bg-zinc-900/60 hover:border-destiny-700 hover:bg-destiny-950/20 transition-all group"
-          >
-            <h3 className="font-semibold text-sm text-zinc-200 group-hover:text-destiny-400 transition-colors">
-              {card.title}
-            </h3>
-            <p className="mt-2 text-xs text-zinc-500 leading-relaxed">
-              {card.desc}
-            </p>
-          </Link>
-        ))}
-      </div>
+      {/* Birth form */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">出生信息</CardTitle>
+          <CardDescription>输入出生时间，生成专属八字命盘和 AI 分析报告</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <BirthForm value={birth} onChange={setBirth} />
+          <Button onClick={submit} disabled={loading} className="mt-4 w-full">
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                排盘中...
+              </>
+            ) : (
+              '开始排盘'
+            )}
+          </Button>
+          {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
+        </CardContent>
+      </Card>
 
-      {/* Newbie hint */}
-      <div className="mt-3 flex items-center gap-1.5 text-xs text-zinc-500">
-        <span>新手？</span>
-        <Link href="/chart" className="text-destiny-400 hover:text-destiny-300 underline underline-offset-2">
-          从排盘开始
-        </Link>
-        <span>&larr;</span>
-      </div>
+      {/* Results */}
+      {result && (
+        <div ref={resultsRef} className="space-y-4 scroll-mt-6">
+          {/* Four pillars */}
+          {result.chart && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">四柱八字</CardTitle>
+                <CardDescription>
+                  {result.chart.dayMaster?.stem}
+                  {result.chart.dayMaster?.wuxing}日主 · {result.structure?.pattern || ''}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <BaziChart data={result.chart} />
+              </CardContent>
+            </Card>
+          )}
 
-      {/* Features */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl mt-20 w-full">
-        {features.map((f) => (
-          <div key={f.title} className="flex flex-col items-center gap-3 px-4 py-5 rounded-xl border border-zinc-800/50">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 ring-1 ring-zinc-700">
-              <f.icon className="h-5 w-5 text-zinc-300" />
-            </div>
-            <h3 className="font-semibold text-sm text-zinc-200">{f.title}</h3>
-            <p className="text-xs text-zinc-500 leading-relaxed">{f.desc}</p>
-          </div>
-        ))}
-      </div>
+          {/* Wuxing radar */}
+          {result.chart?.wuxingCounts && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">五行能量雷达</CardTitle>
+                <CardDescription>五行能量分布雷达图</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <WuxingRadar scores={result.chart.wuxingCounts} />
+              </CardContent>
+            </Card>
+          )}
 
-      {/* Footer */}
-      <p className="mt-16 text-xs text-zinc-600">
-        AI 命理分析仅供参考，不构成人生决策依据
-      </p>
+          {/* Dayun timeline */}
+          {result.fortune && result.fortune.lifePeriods && result.fortune.lifePeriods.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">大运走势</CardTitle>
+                <CardDescription>十年一步大运，滑动查看</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <DayunTimeline
+                  periods={result.fortune.lifePeriods}
+                  currentAge={new Date().getFullYear() - birth.year}
+                />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Chart text */}
+          {result.visualization && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">命盘文本</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <pre className="whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground font-mono">
+                  {result.visualization}
+                </pre>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Chat section (collapsed by default) */}
+          <Card>
+            <button
+              onClick={() => setShowChat(!showChat)}
+              className="flex w-full items-center justify-between px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <span className="font-medium">与 AI 命理师对话</span>
+              {showChat ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+            {showChat && (
+              <CardContent className="space-y-3">
+                <div className="max-h-64 overflow-y-auto space-y-3 pr-1">
+                  {chatMessages.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      命盘上下文已自动注入，直接提问即可（如：我的性格特点、今年运势、适合的行业）。
+                    </p>
+                  )}
+                  {chatMessages.map((m, i) => (
+                    <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div
+                        className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words ${
+                          m.role === 'user'
+                            ? 'bg-destiny-600 text-white rounded-br-md'
+                            : 'bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-bl-md'
+                        }`}
+                      >
+                        {m.text || (m.streaming ? '思考中...' : '')}
+                      </div>
+                    </div>
+                  ))}
+                  <div ref={chatEndRef} />
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sendChat();
+                      }
+                    }}
+                    placeholder="问事业、感情、财运、健康..."
+                    disabled={chatBusy}
+                    className="flex-1"
+                  />
+                  <Button onClick={sendChat} disabled={chatBusy || !chatInput.trim()}>
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+
+          <p className="text-[10px] text-muted-foreground text-center">
+            AI 命理分析仅供参考，不构成人生决策依据
+          </p>
+        </div>
+      )}
+
+      <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
     </div>
   );
 }
