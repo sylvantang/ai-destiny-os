@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { BirthForm, birthToPayload, defaultBirth, type BirthInfo } from '../_components/BirthForm';
 import { SettingsModal } from '@/components/SettingsModal';
 import { Send, ChevronDown, ChevronUp, Sparkles, ThumbsUp, ThumbsDown, RefreshCw, AlertTriangle, Settings } from 'lucide-react';
+import { consumeDataStream } from '@/lib/ai/parse-stream';
 
 // ---- Types ----
 
@@ -254,57 +255,29 @@ export default function ChatPage() {
         throw new Error(errMsg);
       }
 
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error('No response body');
+      if (!res.body) throw new Error('No response body');
 
-      const decoder = new TextDecoder();
-      let buffer = '';
       let hadError = false;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith('data: ')) continue;
-          const raw = trimmed.slice(6);
-          if (raw === '[DONE]') continue;
-
-          try {
-            const ev = JSON.parse(raw);
-            if (ev.type === 'text-delta' && typeof ev.delta === 'string') {
-              setStatus('streaming');
-              setMessages((prev) => {
-                const updated = [...prev];
-                const last = updated[updated.length - 1];
-                if (last && last.role === 'agent' && last.isStreaming) {
-                  last.text += ev.delta;
-                }
-                return updated;
-              });
-            } else if (ev.type === 'finish') {
-              setStatus('idle');
-              setMessages((prev) => {
-                const updated = [...prev];
-                const last = updated[updated.length - 1];
-                if (last && last.role === 'agent' && last.isStreaming) {
-                  last.isStreaming = false;
-                }
-                return updated;
-              });
-            } else if (ev.type === 'error') {
-              hadError = true;
+      const outcome = await consumeDataStream(res.body, {
+        onText: (delta) => {
+          setStatus('streaming');
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            if (last && last.role === 'agent' && last.isStreaming) {
+              last.text += delta;
             }
-          } catch {
-            // Skip unparseable chunks
-          }
-        }
-      }
+            return updated;
+          });
+        },
+        onError: () => {
+          hadError = true;
+        },
+        onFinish: () => {
+          setStatus('idle');
+        },
+      });
+      hadError = hadError || outcome.hadError;
 
       setStatus('idle');
       setMessages((prev) => {

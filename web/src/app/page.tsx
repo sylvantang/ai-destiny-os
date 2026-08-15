@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loader2, Settings, Send, ChevronDown, ChevronUp } from 'lucide-react';
+import { consumeDataStream } from '@/lib/ai/parse-stream';
 
 // ---- API result types (mirror /api/chart response) ----
 
@@ -156,44 +157,25 @@ export default function HomePage() {
         throw new Error(msg);
       }
 
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error('No response body');
+      if (!res.body) throw new Error('No response body');
 
-      const decoder = new TextDecoder();
-      let buffer = '';
       let failed = false;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith('data: ')) continue;
-          const raw = trimmed.slice(6);
-          if (raw === '[DONE]') continue;
-          try {
-            const ev = JSON.parse(raw);
-            if (ev.type === 'text-delta' && typeof ev.delta === 'string') {
-              setChatMessages((prev) => {
-                const updated = [...prev];
-                const last = updated[updated.length - 1];
-                if (last && last.role === 'agent' && last.streaming) {
-                  last.text += ev.delta;
-                }
-                return updated;
-              });
-            } else if (ev.type === 'error') {
-              failed = true;
+      const outcome = await consumeDataStream(res.body, {
+        onText: (delta) => {
+          setChatMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            if (last && last.role === 'agent' && last.streaming) {
+              last.text += delta;
             }
-          } catch {
-            /* skip unparseable chunks */
-          }
-        }
-      }
+            return updated;
+          });
+        },
+        onError: () => {
+          failed = true;
+        },
+      });
+      failed = failed || outcome.hadError;
 
       setChatMessages((prev) => {
         const updated = [...prev];

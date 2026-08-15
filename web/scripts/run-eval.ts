@@ -23,6 +23,7 @@
 // ============================================================
 
 import { getTestCases, evaluateResponse, type EvalResult, type QATestCase } from '../src/lib/eval/bazi-qa';
+import { consumeDataStream } from '../src/lib/ai/parse-stream';
 
 const BASE = process.env.EVAL_BASE_URL || 'http://localhost:3000';
 const PROVIDER = process.env.EVAL_PROVIDER || 'deepseek';
@@ -113,32 +114,14 @@ async function fetchChat(tc: QATestCase, chart: ChartPayload): Promise<string> {
       }),
     });
     if (!res.ok) return '';
+    if (!res.body) return '';
 
-    const reader = res.body?.getReader();
-    if (!reader) return '';
-    const decoder = new TextDecoder();
-    let buffer = '';
     let text = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith('data: ')) continue;
-        const raw = trimmed.slice(6);
-        if (raw === '[DONE]') continue;
-        try {
-          const ev = JSON.parse(raw);
-          if (ev.type === 'text-delta' && typeof ev.delta === 'string') text += ev.delta;
-        } catch {
-          /* skip */
-        }
-      }
-    }
+    await consumeDataStream(res.body, {
+      onText: (delta) => {
+        text += delta;
+      },
+    });
     return text;
   } catch {
     return '';
