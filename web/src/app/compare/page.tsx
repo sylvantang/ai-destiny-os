@@ -6,11 +6,25 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 
+interface CompareSide {
+  dayMaster?: string;
+  strength?: { level?: string; score?: number };
+  structure?: { pattern?: string; favorable?: boolean };
+  yongShen?: { wuxing?: string; shiShen?: string };
+  fortune?: { level?: string; score?: number };
+}
+
+interface CompareResult {
+  compatibility?: { wuxing?: string; yongShen?: string };
+  self?: CompareSide;
+  other?: CompareSide;
+}
+
 export default function ComparePage() {
   const [self, setSelf] = useState<BirthInfo>({ ...defaultBirth });
   const [other, setOther] = useState<BirthInfo>({ ...defaultBirth, year: 1995, month: 3, day: 15, hour: 14, minute: 0, gender: '女' });
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<CompareResult | null>(null);
   const [error, setError] = useState('');
 
   const submit = async () => {
@@ -27,8 +41,8 @@ export default function ComparePage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '请求失败');
       setResult(data);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
