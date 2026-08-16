@@ -1,7 +1,7 @@
 // ============================================================
 // Bazi MCP — tool definitions.
-// 主路径：本仓库自有 deterministic 引擎 core/astro（寿星 VSOP87 节气，
-// 真太阳时校正）。黄历（宜忌）暂走 shunshi-bazi-core（次要路径）。
+// 完全走本仓库自有 deterministic 引擎 core/astro（寿星 VSOP87 节气，
+// 真太阳时校正、老黄历），不依赖任何第三方排盘库。
 // inputSchema 为纯 JSON Schema（MCP 客户端要求）；zod 仅做运行时校验。
 // ============================================================
 
@@ -12,10 +12,10 @@ import {
   calcDaYun,
   getSolarHours,
   equationOfTime,
+  getHuangli,
   SEXAGENARY_NAMES,
   ALL_STEMS,
 } from '../../../core/astro/index.js';
-import { getHuangli } from 'shunshi-bazi-core';
 
 // ---- zod schemas（运行时校验用） ----
 
@@ -229,7 +229,7 @@ export const tools = [
   },
   {
     name: 'get_huangli',
-    description: '查询黄历：宜/忌、彭祖百忌、节气、神煞、胎神、吉神方位、十二时辰宜忌（shunshi-bazi-core 次要路径）',
+    description: '查询黄历：干支/生肖/星座/节气、建除十二神与黄黑道、宜忌、彭祖百忌、神煞、胎神、吉神方位、十二时辰宜忌（自有 core/astro 引擎）',
     inputSchema: {
       type: 'object',
       properties: {
@@ -241,11 +241,11 @@ export const tools = [
     handler: async (rawArgs: unknown) => {
       const args = HuangliSchema.parse(rawArgs);
       const today = new Date();
-      const huangli = getHuangli({
-        year: args.year ?? today.getFullYear(),
-        month: args.month ?? today.getMonth() + 1,
-        day: args.day ?? today.getDate(),
-      });
+      const huangli = getHuangli(
+        args.year ?? today.getFullYear(),
+        args.month ?? today.getMonth() + 1,
+        args.day ?? today.getDate(),
+      );
       return {
         content: [{ type: 'text', text: JSON.stringify(huangli, null, 2) }],
         structuredContent: huangli,

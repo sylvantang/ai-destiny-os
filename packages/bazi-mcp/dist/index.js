@@ -3739,8 +3739,427 @@ function summarizeRelations(bazi) {
   };
 }
 
+// ../../core/astro/huangli.ts
+var SHENGXIAO = ["\u9F20", "\u725B", "\u864E", "\u5154", "\u9F99", "\u86C7", "\u9A6C", "\u7F8A", "\u7334", "\u9E21", "\u72D7", "\u732A"];
+var BRANCH_DIRECTION = {
+  0: "\u6B63\u5317",
+  1: "\u4E1C\u5317",
+  2: "\u4E1C\u5317",
+  3: "\u6B63\u4E1C",
+  4: "\u4E1C\u5357",
+  5: "\u4E1C\u5357",
+  6: "\u6B63\u5357",
+  7: "\u897F\u5357",
+  8: "\u897F\u5357",
+  9: "\u6B63\u897F",
+  10: "\u897F\u5317",
+  11: "\u897F\u5317"
+};
+var JIANCHU = ["\u5EFA", "\u9664", "\u6EE1", "\u5E73", "\u5B9A", "\u6267", "\u7834", "\u5371", "\u6210", "\u6536", "\u5F00", "\u95ED"];
+var YELLOW_VALUES = /* @__PURE__ */ new Set([1, 4, 5, 7, 8, 10]);
+var ZHISHEN_BY_VALUE = [
+  "\u5929\u5211",
+  "\u9752\u9F99",
+  "\u6731\u96C0",
+  "\u767D\u864E",
+  "\u91D1\u532E",
+  "\u5929\u5FB7",
+  "\u5929\u7262",
+  "\u660E\u5802",
+  "\u7389\u5802",
+  "\u7384\u6B66",
+  "\u53F8\u547D",
+  "\u52FE\u9648"
+];
+var YIJI_BY_VALUE = {
+  0: { yi: ["\u51FA\u884C", "\u8D74\u4EFB", "\u4F1A\u53CB", "\u4E0A\u4E66", "\u89C1\u8D35", "\u5F00\u5E02"], ji: ["\u52A8\u571F", "\u5F00\u4ED3", "\u5B89\u846C", "\u7834\u571F"] },
+  1: { yi: ["\u626B\u820D", "\u6C90\u6D74", "\u796D\u7940", "\u7948\u798F", "\u51FA\u884C", "\u4FEE\u9020"], ji: ["\u6C42\u533B\u7597\u75C5", "\u5B89\u846C"] },
+  2: { yi: ["\u796D\u7940", "\u7948\u798F", "\u4F1A\u53CB", "\u8FDB\u4EBA\u53E3", "\u5F00\u5E02"], ji: ["\u52A8\u571F", "\u4FEE\u9020", "\u5B89\u5E8A", "\u683D\u79CD"] },
+  3: { yi: ["\u4FEE\u9970\u57A3\u5899", "\u5E73\u6CBB\u9053\u6D82", "\u796D\u7940", "\u5F00\u5E02"], ji: ["\u5B89\u846C", "\u5F00\u6E20", "\u52A8\u571F"] },
+  4: { yi: ["\u796D\u7940", "\u7948\u798F", "\u8BA2\u5A5A", "\u7ED3\u5A5A", "\u4F1A\u53CB", "\u5B89\u5E8A"], ji: ["\u51FA\u884C", "\u642C\u5BB6", "\u52A8\u571F"] },
+  5: { yi: ["\u8BA2\u5A5A", "\u7ED3\u5A5A", "\u6355\u6349", "\u7ACB\u7EA6", "\u796D\u7940"], ji: ["\u5F00\u5E02", "\u4EA4\u6613", "\u5B89\u846C"] },
+  6: { yi: ["\u7834\u5C4B", "\u574F\u57A3", "\u6C42\u533B\u7597\u75C5", "\u626B\u820D"], ji: ["\u5F00\u5E02", "\u5AC1\u5A36", "\u52A8\u571F", "\u51FA\u884C", "\u7ACB\u7EA6"] },
+  7: { yi: ["\u796D\u7940", "\u7948\u798F", "\u5B89\u5E8A", "\u8BA2\u5A5A", "\u7ED3\u5A5A", "\u51FA\u884C"], ji: ["\u52A8\u571F", "\u5B89\u846C", "\u5F00\u6E20", "\u683D\u79CD"] },
+  8: { yi: ["\u5165\u5B66", "\u5F00\u5E02", "\u4EA4\u6613", "\u7ACB\u7EA6", "\u7ED3\u5A5A", "\u642C\u5BB6"], ji: ["\u8BCD\u8BBC", "\u52A8\u571F", "\u5B89\u846C"] },
+  9: { yi: ["\u796D\u7940", "\u7EB3\u8D22", "\u6355\u6349", "\u5165\u5B66"], ji: ["\u51FA\u884C", "\u7ED3\u5A5A", "\u5B89\u846C", "\u52A8\u571F"] },
+  10: { yi: ["\u5F00\u5E02", "\u4EA4\u6613", "\u51FA\u884C", "\u4E0A\u4EFB", "\u5165\u5B66", "\u7ED3\u5A5A"], ji: ["\u5B89\u846C", "\u7834\u571F"] },
+  11: { yi: ["\u796D\u7940", "\u7948\u798F", "\u5B89\u5E8A", "\u4FEE\u9020"], ji: ["\u5F00\u5E02", "\u51FA\u884C", "\u4E0A\u4EFB", "\u5AC1\u5A36", "\u52A8\u571F"] }
+};
+var PENGZU_STEM = [
+  "\u7532\u4E0D\u5F00\u4ED3\u8D22\u7269\u8017\u6563",
+  "\u4E59\u4E0D\u683D\u690D\u5343\u682A\u4E0D\u957F",
+  "\u4E19\u4E0D\u4FEE\u7076\u5FC5\u89C1\u707E\u6B83",
+  "\u4E01\u4E0D\u5243\u5934\u5934\u5FC5\u751F\u75AE",
+  "\u620A\u4E0D\u53D7\u7530\u7530\u4E3B\u4E0D\u7965",
+  "\u5DF1\u4E0D\u7834\u5238\u4E8C\u6BD4\u5E76\u4EA1",
+  "\u5E9A\u4E0D\u7ECF\u7EDC\u7EC7\u673A\u865A\u5F20",
+  "\u8F9B\u4E0D\u5408\u9171\u4E3B\u4EBA\u4E0D\u5C1D",
+  "\u58EC\u4E0D\u6CF1\u6C34\u66F4\u96BE\u63D0\u9632",
+  "\u7678\u4E0D\u8BCD\u8BBC\u7406\u5F31\u654C\u5F3A"
+];
+var PENGZU_BRANCH = [
+  "\u5B50\u4E0D\u95EE\u535C\u81EA\u60F9\u7978\u6B83",
+  "\u4E11\u4E0D\u51A0\u5E26\u4E3B\u4E0D\u8FD8\u4E61",
+  "\u5BC5\u4E0D\u796D\u7940\u795E\u9B3C\u4E0D\u5C1D",
+  "\u536F\u4E0D\u7A7F\u4E95\u6C34\u6CC9\u4E0D\u9999",
+  "\u8FB0\u4E0D\u54ED\u6CE3\u5FC5\u4E3B\u91CD\u4E27",
+  "\u5DF3\u4E0D\u8FDC\u884C\u8D22\u7269\u4F0F\u85CF",
+  "\u5348\u4E0D\u82EB\u76D6\u5C4B\u4E3B\u66F4\u5F20",
+  "\u672A\u4E0D\u670D\u836F\u6BD2\u6C14\u5165\u80A0",
+  "\u7533\u4E0D\u5B89\u5E8A\u9B3C\u795F\u5165\u623F",
+  "\u9149\u4E0D\u4F1A\u5BA2\u9189\u5750\u98A0\u72C2",
+  "\u620C\u4E0D\u5403\u72AC\u4F5C\u602A\u4E0A\u5E8A",
+  "\u4EA5\u4E0D\u5AC1\u5A36\u4E0D\u5229\u65B0\u90CE"
+];
+var TIANDE = {
+  2: "\u4E01",
+  3: "\u7533",
+  4: "\u58EC",
+  5: "\u8F9B",
+  6: "\u4EA5",
+  7: "\u7532",
+  8: "\u7678",
+  9: "\u5BC5",
+  10: "\u4E19",
+  11: "\u4E59",
+  0: "\u5DF3",
+  1: "\u5E9A"
+};
+var YUEDE = {
+  2: "\u4E19",
+  6: "\u4E19",
+  10: "\u4E19",
+  11: "\u7532",
+  3: "\u7532",
+  7: "\u7532",
+  8: "\u58EC",
+  0: "\u58EC",
+  4: "\u58EC",
+  5: "\u5E9A",
+  9: "\u5E9A",
+  1: "\u5E9A"
+};
+var TIANEN = /* @__PURE__ */ new Set([
+  "\u7532\u5B50",
+  "\u4E59\u4E11",
+  "\u4E19\u5BC5",
+  "\u4E01\u536F",
+  "\u620A\u8FB0",
+  "\u5DF1\u536F",
+  "\u5E9A\u8FB0",
+  "\u8F9B\u5DF3",
+  "\u58EC\u5348",
+  "\u7678\u672A",
+  "\u5DF1\u9149",
+  "\u5E9A\u620C",
+  "\u8F9B\u4EA5",
+  "\u58EC\u5B50",
+  "\u7678\u4E11"
+]);
+var MUCANG = {
+  \u5BC5: [11, 0],
+  \u536F: [11, 0],
+  \u8FB0: [11, 0],
+  // 春：亥子
+  \u5DF3: [2, 3],
+  \u5348: [2, 3],
+  \u672A: [2, 3],
+  // 夏：寅卯
+  \u7533: [4, 10, 1, 7],
+  \u9149: [4, 10, 1, 7],
+  \u620C: [4, 10, 1, 7],
+  // 秋：辰戌丑未
+  \u4EA5: [8, 9],
+  \u5B50: [8, 9],
+  \u4E11: [8, 9]
+  // 冬：申酉
+};
+var SANHE = {
+  2: [2, 6, 10],
+  6: [2, 6, 10],
+  10: [2, 6, 10],
+  // 寅午戌
+  11: [11, 3, 7],
+  3: [11, 3, 7],
+  7: [11, 3, 7],
+  // 亥卯未
+  8: [8, 0, 4],
+  0: [8, 0, 4],
+  4: [8, 0, 4],
+  // 申子辰
+  5: [5, 9, 1],
+  9: [5, 9, 1],
+  1: [5, 9, 1]
+  // 巳酉丑
+};
+var YIMA = {
+  2: 8,
+  6: 8,
+  10: 8,
+  // 寅午戌 → 申
+  11: 5,
+  3: 5,
+  7: 5,
+  // 亥卯未 → 巳
+  8: 2,
+  0: 2,
+  4: 2,
+  // 申子辰 → 寅
+  5: 11,
+  9: 11,
+  1: 11
+  // 巳酉丑 → 亥
+};
+var TIANSHU = {
+  \u5BC5: "\u620A\u5BC5",
+  \u536F: "\u620A\u5BC5",
+  \u8FB0: "\u620A\u5BC5",
+  \u5DF3: "\u7532\u5348",
+  \u5348: "\u7532\u5348",
+  \u672A: "\u7532\u5348",
+  \u7533: "\u620A\u7533",
+  \u9149: "\u620A\u7533",
+  \u620C: "\u620A\u7533",
+  \u4EA5: "\u7532\u5B50",
+  \u5B50: "\u7532\u5B50",
+  \u4E11: "\u7532\u5B50"
+};
+var SIJI = {
+  \u5BC5: 10,
+  \u536F: 10,
+  \u8FB0: 10,
+  // 春戌
+  \u5DF3: 1,
+  \u5348: 1,
+  \u672A: 1,
+  // 夏丑
+  \u7533: 4,
+  \u9149: 4,
+  \u620C: 4,
+  // 秋辰
+  \u4EA5: 7,
+  \u5B50: 7,
+  \u4E11: 7
+  // 冬未
+};
+var XISHEN = {
+  \u7532: "\u4E1C\u5317",
+  \u5DF1: "\u4E1C\u5317",
+  \u4E59: "\u897F\u5317",
+  \u5E9A: "\u897F\u5317",
+  \u4E19: "\u897F\u5357",
+  \u8F9B: "\u897F\u5357",
+  \u4E01: "\u6B63\u5357",
+  \u58EC: "\u6B63\u5357",
+  \u620A: "\u4E1C\u5357",
+  \u7678: "\u4E1C\u5357"
+};
+var CAISHEN = {
+  \u7532: "\u4E1C\u5317",
+  \u4E59: "\u4E1C\u5317",
+  \u4E19: "\u897F\u5357",
+  \u4E01: "\u897F\u5357",
+  \u620A: "\u6B63\u5317",
+  \u5DF1: "\u6B63\u5317",
+  \u5E9A: "\u6B63\u4E1C",
+  \u8F9B: "\u6B63\u4E1C",
+  \u58EC: "\u6B63\u5357",
+  \u7678: "\u6B63\u5357"
+};
+var TIANYI = {
+  \u7532: [1, 7],
+  \u620A: [1, 7],
+  \u5E9A: [1, 7],
+  // 丑未
+  \u4E59: [0, 8],
+  \u5DF1: [0, 8],
+  // 子申
+  \u4E19: [11, 9],
+  \u4E01: [11, 9],
+  // 亥酉
+  \u58EC: [3, 5],
+  \u7678: [3, 5],
+  // 卯巳
+  \u8F9B: [6, 2]
+  // 午寅
+};
+var TAISHEN_STEM = {
+  \u7532: "\u95E8",
+  \u5DF1: "\u95E8",
+  \u4E59: "\u7893\u78E8",
+  \u5E9A: "\u7893\u78E8",
+  \u4E19: "\u53A8\u7076",
+  \u8F9B: "\u53A8\u7076",
+  \u4E01: "\u4ED3\u5E93",
+  \u58EC: "\u4ED3\u5E93",
+  \u620A: "\u623F\u5E8A",
+  \u7678: "\u623F\u5E8A"
+};
+var TAISHEN_BRANCH = {
+  0: "\u7893",
+  6: "\u7893",
+  1: "\u5395",
+  7: "\u5395",
+  2: "\u7089",
+  8: "\u7089",
+  3: "\u5927\u95E8",
+  9: "\u5927\u95E8",
+  4: "\u9E21\u6816",
+  10: "\u9E21\u6816",
+  5: "\u5E8A",
+  11: "\u5E8A"
+};
+var XINGZUO = [
+  [1, 20, "\u6C34\u74F6\u5EA7"],
+  [2, 19, "\u53CC\u9C7C\u5EA7"],
+  [3, 21, "\u767D\u7F8A\u5EA7"],
+  [4, 20, "\u91D1\u725B\u5EA7"],
+  [5, 21, "\u53CC\u5B50\u5EA7"],
+  [6, 22, "\u5DE8\u87F9\u5EA7"],
+  [7, 23, "\u72EE\u5B50\u5EA7"],
+  [8, 23, "\u5904\u5973\u5EA7"],
+  [9, 23, "\u5929\u79E4\u5EA7"],
+  [10, 24, "\u5929\u874E\u5EA7"],
+  [11, 23, "\u5C04\u624B\u5EA7"],
+  [12, 22, "\u6469\u7FAF\u5EA7"]
+];
+var FESTIVALS = {
+  "1-1": "\u5143\u65E6",
+  "2-14": "\u60C5\u4EBA\u8282",
+  "3-8": "\u5987\u5973\u8282",
+  "3-12": "\u690D\u6811\u8282",
+  "5-1": "\u52B3\u52A8\u8282",
+  "5-4": "\u9752\u5E74\u8282",
+  "6-1": "\u513F\u7AE5\u8282",
+  "7-1": "\u5EFA\u515A\u8282",
+  "8-1": "\u5EFA\u519B\u8282",
+  "9-10": "\u6559\u5E08\u8282",
+  "10-1": "\u56FD\u5E86\u8282",
+  "12-24": "\u5E73\u5B89\u591C",
+  "12-25": "\u5723\u8BDE\u8282"
+};
+var SHICHEN_NAMES = ["\u5B50\u65F6", "\u4E11\u65F6", "\u5BC5\u65F6", "\u536F\u65F6", "\u8FB0\u65F6", "\u5DF3\u65F6", "\u5348\u65F6", "\u672A\u65F6", "\u7533\u65F6", "\u9149\u65F6", "\u620C\u65F6", "\u4EA5\u65F6"];
+var WEEKDAYS = ["\u65E5", "\u4E00", "\u4E8C", "\u4E09", "\u56DB", "\u4E94", "\u516D"];
+function getHuangli(year, month, day) {
+  const birth = {
+    year,
+    month,
+    day,
+    hour: 12,
+    minute: 0,
+    longitude: 116.4,
+    isDST: false,
+    gender: "\u7537"
+  };
+  const bazi = calcBaZi(birth);
+  const yearGz = SEXAGENARY_NAMES[bazi.year.sexagenaryIndex];
+  const monthGz = SEXAGENARY_NAMES[bazi.month.sexagenaryIndex];
+  const dayGz = SEXAGENARY_NAMES[bazi.day.sexagenaryIndex];
+  const yearBranch = bazi.year.branchIndex;
+  const monthBranch = bazi.month.branchIndex;
+  const dayBranch = bazi.day.branchIndex;
+  const dayStemIdx = bazi.day.stemIndex;
+  const dayStemName = bazi.day.stem.name;
+  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  const shengxiao = SHENGXIAO[yearBranch];
+  let xingzuo = "\u6469\u7FAF\u5EA7";
+  for (const [m, d, name] of XINGZUO) {
+    if (m < month || m === month && d <= day) xingzuo = name;
+  }
+  let jieqiName = null;
+  for (const jq of getJieQi(year)) {
+    const t = new Date(jq.date.getTime() + 8 * 3600 * 1e3);
+    if (t.getUTCFullYear() === year && t.getUTCMonth() + 1 === month && t.getUTCDate() === day) {
+      jieqiName = jq.name;
+      break;
+    }
+  }
+  const jianchuValue = ((dayBranch - monthBranch) % 12 + 12) % 12;
+  const jianchu = JIANCHU[jianchuValue];
+  const isYellow = YELLOW_VALUES.has(jianchuValue);
+  const zhishen = ZHISHEN_BY_VALUE[jianchuValue];
+  const yi = YIJI_BY_VALUE[jianchuValue]?.yi ?? [];
+  const ji = YIJI_BY_VALUE[jianchuValue]?.ji ?? [];
+  const pengzu = [PENGZU_STEM[dayStemIdx], PENGZU_BRANCH[dayBranch]];
+  const jiShen = [];
+  const xiongSha = [];
+  if (TIANDE[monthBranch] === dayStemName) jiShen.push("\u5929\u5FB7");
+  if (YUEDE[monthBranch] === dayStemName) jiShen.push("\u6708\u5FB7");
+  if (TIANEN.has(dayGz)) jiShen.push("\u5929\u6069");
+  if (TIANSHU[ALL_BRANCHES[monthBranch].name] === dayGz) jiShen.push("\u5929\u8D66");
+  if (MUCANG[ALL_BRANCHES[monthBranch].name]?.includes(dayBranch)) jiShen.push("\u6BCD\u4ED3");
+  if (SANHE[monthBranch]?.includes(dayBranch) && dayBranch !== monthBranch) jiShen.push("\u4E09\u5408");
+  if (isCombination(dayBranch, monthBranch)) jiShen.push("\u516D\u5408");
+  if (YIMA[yearBranch] === dayBranch) jiShen.push("\u9A7F\u9A6C");
+  if (isYellow) jiShen.push(zhishen);
+  if (dayBranch === (monthBranch + 6) % 12) xiongSha.push("\u6708\u7834");
+  if (dayBranch === (yearBranch + 6) % 12) xiongSha.push("\u5927\u8017");
+  const sijiTarget = SIJI[ALL_BRANCHES[monthBranch].name];
+  if (sijiTarget !== void 0 && dayBranch === sijiTarget) xiongSha.push("\u56DB\u51FB");
+  if (dayBranch === 5 || dayBranch === 11) xiongSha.push("\u91CD\u65E5");
+  if (!isYellow) xiongSha.push(zhishen);
+  const taishen = `\u5360${TAISHEN_STEM[dayStemName] ?? ""}${TAISHEN_BRANCH[dayBranch] ?? ""}\uFF08${BRANCH_DIRECTION[dayBranch] ?? ""}\uFF09`;
+  const xishen = XISHEN[dayStemName] ?? "";
+  const caishen = CAISHEN[dayStemName] ?? "";
+  const guiren = TIANYI[dayStemName] ?? [1, 7];
+  const yanggui = BRANCH_DIRECTION[guiren[0]] ?? "";
+  const yingui = BRANCH_DIRECTION[guiren[1]] ?? "";
+  const taisui = BRANCH_DIRECTION[yearBranch] ?? "";
+  const festivals = FESTIVALS[`${month}-${day}`] ? [FESTIVALS[`${month}-${day}`]] : [];
+  const hourStemStart = getHourStemStart(dayStemIdx);
+  const shichen = [];
+  for (let h = 0; h < 12; h++) {
+    const hIdx = h;
+    const stem = (hourStemStart + h) % 10;
+    const gz = SEXAGENARY_NAMES[sexagenaryIndex(stem, h)];
+    let yiList = [];
+    let jiList = [];
+    if (isCombination(dayBranch, hIdx)) {
+      yiList = ["\u4F1A\u53CB", "\u6C42\u8D22", "\u51FA\u884C"];
+    } else if (isClash(dayBranch, hIdx)) {
+      jiList = ["\u51FA\u884C", "\u5AC1\u5A36", "\u52A8\u571F"];
+    } else if (getPunishment(dayBranch, hIdx) || isHarm(dayBranch, hIdx)) {
+      jiList = ["\u5B89\u5E8A", "\u5B89\u846C"];
+    } else {
+      yiList = ["\u796D\u7940", "\u7948\u798F"];
+    }
+    shichen.push({ \u65F6\u8FB0: SHICHEN_NAMES[h], \u5E72\u652F: gz, \u5B9C: yiList, \u5FCC: jiList });
+  }
+  return {
+    \u516C\u5386: `${year}\u5E74${month}\u6708${day}\u65E5`,
+    \u661F\u671F: `\u661F\u671F${WEEKDAYS[weekday]}`,
+    \u519C\u5386: null,
+    \u751F\u8096: shengxiao,
+    \u5E72\u652F: { \u5E74: yearGz, \u6708: monthGz, \u65E5: dayGz },
+    \u8282\u6C14: jieqiName,
+    \u661F\u5EA7: xingzuo,
+    \u5B9C: yi,
+    \u5FCC: ji,
+    \u5F6D\u7956\u767E\u5FCC: pengzu,
+    \u5341\u4E8C\u795E: { \u5EFA\u9664: jianchu, \u9EC4\u9ED1\u9053: isYellow ? "\u9EC4\u9053" : "\u9ED1\u9053" },
+    \u4E8C\u5341\u516B\u5BBF: null,
+    \u4E5D\u661F: null,
+    \u516D\u66DC: null,
+    \u795E\u715E: { \u5409\u795E: [...new Set(jiShen)], \u51F6\u715E: [...new Set(xiongSha)] },
+    \u80CE\u795E: taishen,
+    \u6708\u76F8: null,
+    \u5409\u795E\u65B9\u4F4D: { \u559C\u795E: xishen, \u8D22\u795E: caishen, \u798F\u795E: null, \u9633\u8D35: yanggui, \u9634\u8D35: yingui, \u592A\u5C81: taisui },
+    \u8282\u4EE4: { \u4E09\u4F0F: null, \u6570\u4E5D: null, \u6885\u96E8: null, \u7269\u5019: null },
+    \u8282\u65E5: festivals,
+    \u65F6\u8FB0\u5B9C\u5FCC: shichen,
+    limitations: [
+      "\u519C\u5386/\u6708\u76F8/\u4E5D\u661F/\u516D\u66DC/\u4E8C\u5341\u516B\u5BBF/\u8282\u4EE4\u4F9D\u8D56\u519C\u5386\u5386\u6CD5\uFF0C\u81EA\u6709 core \u5C1A\u65E0\u519C\u5386\u5F15\u64CE\uFF0Cv1 \u7F6E\u7A7A",
+      "\u4EA4\u8282\u5F53\u65E5\uFF08\u5982\u7ACB\u6625\u3001\u5C0F\u6691\u5F53\u5929\uFF09\u6708\u5EFA\u6309\u65E5\u9996\u65F6\u523B\u8BA1\u7B97\uFF1B\u4E2A\u522B\u5386\u4E66\u6309\u4EA4\u8282\u540E\u6574\u65E5\u7B97\u65B0\u6708\u5EFA",
+      "\u9EC4\u9ED1\u9053\u4E0E\u503C\u795E\u9075\u5FAA\u901A\u884C\u6B4C\u8BC0\uFF08\u5EFA\u6EE1\u5E73\u6536\u9ED1\u3001\u9664\u5371\u5B9A\u6267\u9EC4\uFF09\uFF0C\u4E0E\u4E2A\u522B\u4E07\u5E74\u5386\u7684\u5185\u90E8\u503C\u795E\u8868\u53EF\u80FD\u4E0D\u540C",
+      "\u5409\u795E\u65B9\u4F4D\u91C7\u7528\u6807\u51C6\u516B\u65B9\u4F4D\u540D\uFF08\u6B63\u5317/\u4E1C\u5317/\u6B63\u4E1C/\u4E1C\u5357/\u6B63\u5357/\u897F\u5357/\u6B63\u897F/\u897F\u5317\uFF09\uFF1B\u592A\u5C81\u65B9\u4F4D\u6309\u5E74\u652F",
+      "\u9633\u8D35/\u9634\u8D35\u6309\u901A\u884C\u7EA6\u5B9A\uFF08\u6B4C\u8BC0\u524D\u652F\u4E3A\u9633\u8D35\u3001\u540E\u652F\u4E3A\u9634\u8D35\uFF09\uFF0C\u4E2A\u522B\u5386\u4E66\u6309\u663C\u591C\u8D35\u53E6\u884C\u533A\u5206",
+      "\u80CE\u795E\u65B9\u4F4D\u6309\u65E5\u652F\u672C\u6C14\u65B9\u4F4D\u6807\u6CE8\uFF0C\u4E2A\u522B\u5386\u4E66\u7528\u5176\u4ED6\u6392\u5E03",
+      "\u5B9C\u5FCC/\u795E\u715E\u4E3A\u901A\u884C\u901A\u4E66\u6807\u51C6\u8868\uFF0C\u4E0D\u540C\u6D41\u6D3E\u5386\u4E66\u6216\u6709\u51FA\u5165"
+    ]
+  };
+}
+
 // src/tools.ts
-import { getHuangli } from "shunshi-bazi-core";
 var BirthSchema = z.object({
   year: z.number().int().min(1900).max(2100),
   month: z.number().int().min(1).max(12),
@@ -3926,7 +4345,7 @@ var tools = [
   },
   {
     name: "get_huangli",
-    description: "\u67E5\u8BE2\u9EC4\u5386\uFF1A\u5B9C/\u5FCC\u3001\u5F6D\u7956\u767E\u5FCC\u3001\u8282\u6C14\u3001\u795E\u715E\u3001\u80CE\u795E\u3001\u5409\u795E\u65B9\u4F4D\u3001\u5341\u4E8C\u65F6\u8FB0\u5B9C\u5FCC\uFF08shunshi-bazi-core \u6B21\u8981\u8DEF\u5F84\uFF09",
+    description: "\u67E5\u8BE2\u9EC4\u5386\uFF1A\u5E72\u652F/\u751F\u8096/\u661F\u5EA7/\u8282\u6C14\u3001\u5EFA\u9664\u5341\u4E8C\u795E\u4E0E\u9EC4\u9ED1\u9053\u3001\u5B9C\u5FCC\u3001\u5F6D\u7956\u767E\u5FCC\u3001\u795E\u715E\u3001\u80CE\u795E\u3001\u5409\u795E\u65B9\u4F4D\u3001\u5341\u4E8C\u65F6\u8FB0\u5B9C\u5FCC\uFF08\u81EA\u6709 core/astro \u5F15\u64CE\uFF09",
     inputSchema: {
       type: "object",
       properties: {
@@ -3938,11 +4357,11 @@ var tools = [
     handler: async (rawArgs) => {
       const args = HuangliSchema.parse(rawArgs);
       const today = /* @__PURE__ */ new Date();
-      const huangli = getHuangli({
-        year: args.year ?? today.getFullYear(),
-        month: args.month ?? today.getMonth() + 1,
-        day: args.day ?? today.getDate()
-      });
+      const huangli = getHuangli(
+        args.year ?? today.getFullYear(),
+        args.month ?? today.getMonth() + 1,
+        args.day ?? today.getDate()
+      );
       return {
         content: [{ type: "text", text: JSON.stringify(huangli, null, 2) }],
         structuredContent: huangli

@@ -84,6 +84,10 @@ export {
   calcLiuRi,
 } from './liunian.js';
 
+// HuangLi
+export { getHuangli } from './huangli.js';
+export type { HuangliResult } from './huangli.js';
+
 // Earthly Branch Relations
 export {
   isClash,

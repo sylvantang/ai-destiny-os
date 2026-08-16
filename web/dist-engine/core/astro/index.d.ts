@@ -6,6 +6,8 @@ export type { SunPosition } from './jieqi.js';
 export { calcBaZi, generateChart, formatBaZi, } from './bazi.js';
 export { calcDaYun, getCurrentDayun, } from './dayun.js';
 export { calcLiuNian, calcLiuYue, calcLiuRi, } from './liunian.js';
+export { getHuangli } from './huangli.js';
+export type { HuangliResult } from './huangli.js';
 export { isClash, getClashPair, CLASH_PAIRS, isCombination, getCombinationPartner, COMBINATION_WUXING, getPunishment, isSelfPunishment, isHarm, getHarm, THREE_HARMONY_SETS, getHalfHarmony, THREE_MEETING_SETS, isStemClash, getStemClashName, isStemCombine, } from './earthlyBranchRelations.js';
 export type { PunishmentType } from './earthlyBranchRelations.js';
 //# sourceMappingURL=index.d.ts.map

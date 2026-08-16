@@ -13,6 +13,8 @@ export { calcBaZi, generateChart, formatBaZi, } from './bazi.js';
 export { calcDaYun, getCurrentDayun, } from './dayun.js';
 // LiuNian
 export { calcLiuNian, calcLiuYue, calcLiuRi, } from './liunian.js';
+// HuangLi
+export { getHuangli } from './huangli.js';
 // Earthly Branch Relations
 export { isClash, getClashPair, CLASH_PAIRS, isCombination, getCombinationPartner, COMBINATION_WUXING, getPunishment, isSelfPunishment, isHarm, getHarm, THREE_HARMONY_SETS, getHalfHarmony, THREE_MEETING_SETS, isStemClash, getStemClashName, isStemCombine, } from './earthlyBranchRelations.js';
 //# sourceMappingURL=index.js.map
