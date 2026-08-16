@@ -1,11 +1,11 @@
 {
   "name": "@sylvantang/bazi-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
-  "description": "Bazi MCP Server for AI Destiny OS",
+  "description": "Bazi MCP Server for AI Destiny OS (primary path: ai-destiny-os core/astro engine)",
   "bin": { "bazi-mcp": "./dist/index.js" },
   "scripts": {
-    "build": "tsc",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/index.js --packages=external",
     "dev": "tsx watch src/index.ts",
     "prepublishOnly": "npm run build"
   },
@@ -16,6 +16,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "esbuild": "^0.27.0",
     "typescript": "^5.7.0",
     "tsx": "^4.19.0"
   },

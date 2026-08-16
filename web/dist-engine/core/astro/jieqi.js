@@ -117,9 +117,11 @@ export function sunLongitude(jd) {
  */
 export function equationOfTimeMinutes(jd) {
     const pos = sunPosition(jd);
+    // Mean longitude must be reduced to 0–360 for the formula
+    const L0 = ((pos.meanLongitude % 360) + 360) % 360;
     // Nutation in longitude (degrees)
     const dpsi = -0.00478 * sind(125.04 - 1934.136 * pos.T);
-    return 4 * (pos.meanLongitude - 0.0057183 - pos.rightAscension + dpsi * cosd(pos.obliquity));
+    return 4 * (L0 - 0.0057183 - pos.rightAscension + dpsi * cosd(pos.obliquity));
 }
 // ---- Solar Term Finding ----
 /**
