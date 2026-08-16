@@ -87,6 +87,20 @@ describe('P0 Golden — 立春边界', () => {
     expect(gz(before.month)).toBe('丙寅');
     expect(gz(after.month)).toBe('丁卯');
   });
+
+  it('2000-02-04 立春（20:40 交节）换年换月：20:30 → 己卯 丁丑，20:50 → 庚辰 戊寅', () => {
+    const before = calcBaZi(birth(2000, 2, 4, 20, 30, BJ, '男'));
+    const after = calcBaZi(birth(2000, 2, 4, 20, 50, BJ, '男'));
+    expect(pillars(before)).toEqual(['己卯', '丁丑', '壬辰', '庚戌']);
+    expect(pillars(after)).toEqual(['庚辰', '戊寅', '壬辰', '庚戌']);
+  });
+
+  it('2026-02-04 立春（04:01 交节）换年换月：03:50 → 乙巳 己丑，04:10 → 丙午 庚寅', () => {
+    const before = calcBaZi(birth(2026, 2, 4, 3, 50, BJ, '男'));
+    const after = calcBaZi(birth(2026, 2, 4, 4, 10, BJ, '男'));
+    expect(pillars(before)).toEqual(['乙巳', '己丑', '己酉', '丙寅']);
+    expect(pillars(after)).toEqual(['丙午', '庚寅', '己酉', '丙寅']);
+  });
 });
 
 describe('P0 Golden — 节气时刻精度（官方公布值 ±90 秒）', () => {
@@ -97,6 +111,7 @@ describe('P0 Golden — 节气时刻精度（官方公布值 ±90 秒）', () =>
     [2026, '立春', '2026-02-03T20:01:51Z'],
     [2024, '惊蛰', '2024-03-05T02:22:31Z'],
     [2024, '冬至', '2024-12-21T09:20:20Z'],
+    [2000, '立春', '2000-02-04T12:40:24Z'],
   ];
 
   for (const [year, name, iso] of CASES) {
