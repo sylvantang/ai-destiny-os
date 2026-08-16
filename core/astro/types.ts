@@ -77,12 +77,14 @@ export interface BirthInfo {
   year: number;
   month: number;        // 1-12
   day: number;
-  hour: number;         // 0-23
+  hour: number;         // 0-23 (UTC+8 钟表时)
   minute: number;       // 0-59
   longitude: number;    // 经度 (东经为正), e.g. 北京 116.4
-  isDST: boolean;       // 是否夏令时
+  isDST: boolean;       // 钟表时是否已含夏令时（中国 1986-1991 实行过）
   gender: '男' | '女';
   city?: string;
+  /** 钟表时对应的标准子午线（°E），默认 120（北京时间）；海外出生请显式传入 */
+  standardMeridian?: number;
 }
 
 /** 大运一柱 */
@@ -117,6 +119,22 @@ export interface LiuNian {
   };
 }
 
+/** 四柱干支之间的刑冲合害关系汇总 */
+export interface ChartRelations {
+  /** 天干相冲，如 '年-月 甲庚相冲' */
+  stemClashes: string[];
+  /** 天干相合，如 '年-月 甲己合土' */
+  stemCombines: string[];
+  /** 地支六冲，如 '年-月 子午冲' */
+  branchClashes: string[];
+  /** 地支六合，如 '年-月 子丑合' */
+  branchCombinations: string[];
+  /** 地支三刑，如 '年-月 无恩之刑' */
+  branchPunishments: string[];
+  /** 地支六害，如 '年-月 子未害' */
+  branchHarms: string[];
+}
+
 /** 完整的命盘输出 */
 export interface DestinyChart {
   bazi: BaZi;
@@ -126,4 +144,5 @@ export interface DestinyChart {
   wuxingCount: Record<Wuxing, number>;
   dayMaster: HeavenlyStem;   // 日主
   dayMasterWuxing: Wuxing;
+  relations: ChartRelations; // 四柱刑冲合害汇总
 }

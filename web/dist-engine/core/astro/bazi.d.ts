@@ -7,7 +7,8 @@ import type { BaZi, BirthInfo, DestinyChart } from './types.js';
  */
 export declare function calcBaZi(birth: BirthInfo): BaZi;
 /**
- * Generate a complete destiny chart from birth information.
+ * Generate a complete destiny chart from birth information,
+ * including 大运, 五行统计 and 四柱刑冲合害汇总.
  */
 export declare function generateChart(birth: BirthInfo): DestinyChart;
 /**

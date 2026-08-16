@@ -33,12 +33,12 @@ export function calcDaYun(
   dayMasterIndex: HeavenlyStemIndex,
 ): DaYunPillar[] {
   const direction = getDayunDirection(yearStem, birth.gender);
-  const birthDate = buildBirthDate(birth);
+  const birthEpoch = buildBirthEpoch(birth);
 
   // Find the reference 节 for starting age calculation
-  const refJieDate = findReferenceJie(birthDate, direction);
+  const refJieDate = findReferenceJie(birthEpoch, direction);
   const dayDiff = Math.abs(
-    (refJieDate.getTime() - birthDate.getTime()) / (24 * 60 * 60 * 1000),
+    (refJieDate.getTime() - birthEpoch) / (24 * 60 * 60 * 1000),
   );
 
   // Starting age: 3 days = 1 year
@@ -117,12 +117,12 @@ function getDayunDirection(
   return gender === '男' ? '逆排' : '顺排';
 }
 
-function buildBirthDate(birth: BirthInfo): Date {
-  const d = new Date(birth.year, birth.month - 1, birth.day, birth.hour, birth.minute);
-  if (birth.isDST) {
-    d.setHours(d.getHours() - 1);
-  }
-  return d;
+function buildBirthEpoch(birth: BirthInfo): number {
+  // UTC+8 wall clock → epoch ms; DST subtracts one hour explicitly.
+  const epoch =
+    Date.UTC(birth.year, birth.month - 1, birth.day, birth.hour, birth.minute)
+    - 8 * 3600 * 1000;
+  return birth.isDST ? epoch - 3600 * 1000 : epoch;
 }
 
 /**
@@ -132,10 +132,10 @@ function buildBirthDate(birth: BirthInfo): Date {
  * 逆排: find the PREVIOUS 节 BEFORE birth
  */
 function findReferenceJie(
-  birthDate: Date,
+  birthEpoch: number,
   direction: '顺排' | '逆排',
 ): Date {
-  const year = birthDate.getUTCFullYear();
+  const year = new Date(birthEpoch + 8 * 3600 * 1000).getUTCFullYear();
 
   // Get jie from surrounding years
   const prevYearJQ = getJieQi(year - 1);
@@ -143,27 +143,25 @@ function findReferenceJie(
   const nextYearJQ = getJieQi(year + 1);
 
   const allJie = [...prevYearJQ, ...thisYearJQ, ...nextYearJQ]
-    .filter(jq => jq.isJie)
+    .filter((jq) => jq.isJie)
     .sort((a, b) => a.date.getTime() - b.date.getTime());
-
-  const birthTime = birthDate.getTime();
 
   if (direction === '顺排') {
     // Find the NEXT 节 after birth
     for (const jie of allJie) {
-      if (jie.date.getTime() > birthTime) {
+      if (jie.date.getTime() > birthEpoch) {
         return jie.date;
       }
     }
-    // Fallback: next year's 小寒
-    return allJie[allJie.length - 1]?.date ?? birthDate;
+    // Fallback: last available jie
+    return allJie[allJie.length - 1]?.date ?? new Date(birthEpoch);
   }
 
   // 逆排: find the PREVIOUS 节 before birth
   let prevJie = allJie[0];
   for (const jie of allJie) {
-    if (jie.date.getTime() >= birthTime) break;
+    if (jie.date.getTime() >= birthEpoch) break;
     prevJie = jie;
   }
-  return prevJie?.date ?? birthDate;
+  return prevJie?.date ?? new Date(birthEpoch);
 }

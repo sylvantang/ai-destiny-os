@@ -1,7 +1,8 @@
-export type { HeavenlyStemIndex, EarthlyBranchIndex, SexagenaryIndex, Wuxing, YinYang, ShiShen, HeavenlyStem, EarthlyBranch, HiddenStem, Pillar, BaZi, BirthInfo, DaYunPillar, JieQi, LiuNian, DestinyChart, } from './types.js';
+export type { HeavenlyStemIndex, EarthlyBranchIndex, SexagenaryIndex, Wuxing, YinYang, ShiShen, HeavenlyStem, EarthlyBranch, HiddenStem, Pillar, BaZi, BirthInfo, DaYunPillar, JieQi, LiuNian, DestinyChart, ChartRelations, } from './types.js';
 export { getStem, getBranch, getHiddenStems, getNayin, getShiShen, getMonthStemStart, getHourStemStart, sexagenaryIndex, stemFromSexagenary, branchFromSexagenary, ALL_STEMS, ALL_BRANCHES, SEXAGENARY_NAMES, HIDDEN_STEMS, JIEQI_NAMES, JIEQI_LONGITUDE, } from './constants.js';
 export { equationOfTime, toTrueSolarTime, getHourBranch, getSolarHours, } from './solarTime.js';
-export { toJulianDate, fromJulianDate, sunLongitude, getJieQi, getJieQiByName, getMonthBranchByDate, } from './jieqi.js';
+export { toJulianDate, fromJulianDate, sunLongitude, sunPosition, equationOfTimeMinutes, getJieQi, getJieQiByName, getMonthBranchByDate, } from './jieqi.js';
+export type { SunPosition } from './jieqi.js';
 export { calcBaZi, generateChart, formatBaZi, } from './bazi.js';
 export { calcDaYun, getCurrentDayun, } from './dayun.js';
 export { calcLiuNian, calcLiuYue, calcLiuRi, } from './liunian.js';

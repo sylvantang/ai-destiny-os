@@ -6,7 +6,7 @@ export { getStem, getBranch, getHiddenStems, getNayin, getShiShen, getMonthStemS
 // Solar time
 export { equationOfTime, toTrueSolarTime, getHourBranch, getSolarHours, } from './solarTime.js';
 // JieQi
-export { toJulianDate, fromJulianDate, sunLongitude, getJieQi, getJieQiByName, getMonthBranchByDate, } from './jieqi.js';
+export { toJulianDate, fromJulianDate, sunLongitude, sunPosition, equationOfTimeMinutes, getJieQi, getJieQiByName, getMonthBranchByDate, } from './jieqi.js';
 // BaZi
 export { calcBaZi, generateChart, formatBaZi, } from './bazi.js';
 // DaYun

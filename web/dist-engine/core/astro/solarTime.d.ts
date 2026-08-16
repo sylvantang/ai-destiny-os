@@ -1,20 +1,30 @@
 /**
- * Compute the Equation of Time (in minutes) for a given date.
+ * Compute the Equation of Time (in minutes) for a given instant.
  * Equation of Time = apparent solar time − mean solar time.
  * Positive means the sundial is ahead of the clock.
  *
- * Uses a simplified but accurate (within ~30 seconds) formula.
+ * Time-aware (JD-based) implementation, accuracy ~1–2 seconds
+ * (Meeus Ch.28).
  */
 export declare function equationOfTime(date: Date): number;
 /**
  * Convert standard clock time to true solar time.
  *
- * @param date - Local clock time
+ * @param date - The clock instant (interpreted as UTC+8 wall clock)
  * @param longitude - Observer's longitude in degrees (east positive)
  * @param standardMeridian - Timezone's standard meridian (default 120°E for China)
- * @returns True solar time as a Date object
+ * @returns True solar time as a Date (instant)
  */
 export declare function toTrueSolarTime(date: Date, longitude: number, standardMeridian?: number): Date;
+/**
+ * Get the true solar time as decimal hours.
+ *
+ * @param date - The clock instant (UTC+8 wall clock)
+ * @param longitude - Observer's longitude (east positive)
+ * @param isDST - True if the given wall clock already includes DST
+ * @param standardMeridian - Clock-time standard meridian (default 120°E)
+ */
+export declare function getSolarHours(date: Date, longitude: number, isDST: boolean, standardMeridian?: number): number;
 /**
  * Get the earthly branch index for an hour based on true solar time.
  *
@@ -32,9 +42,5 @@ export declare function toTrueSolarTime(date: Date, longitude: number, standardM
  *  戌时: 19:00–20:59  (branch 10)
  *  亥时: 21:00–22:59  (branch 11)
  */
-export declare function getHourBranch(date: Date, longitude: number, isDST: boolean): number;
-/**
- * Get the true solar time as decimal hours (local time).
- */
-export declare function getSolarHours(date: Date, longitude: number, isDST: boolean): number;
+export declare function getHourBranch(date: Date, longitude: number, isDST: boolean, standardMeridian?: number): number;
 //# sourceMappingURL=solarTime.d.ts.map

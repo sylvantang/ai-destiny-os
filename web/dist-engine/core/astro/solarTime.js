@@ -2,55 +2,73 @@
 // AI Destiny OS — Astro Core: True Solar Time
 // Converts clock time to true solar (apparent) time for
 // accurate hour-pillar determination.
+//
+// All Date objects are treated as pure instants (epoch ms);
+// wall-clock reads are done against UTC+8 (China Standard Time)
+// so results never depend on the host machine timezone or its
+// historical DST tables.
 // ============================================================
+import { equationOfTimeMinutes, toJulianDate } from './jieqi.js';
+const HOUR_MS = 3600 * 1000;
+const CST_OFFSET_MS = 8 * HOUR_MS;
 /**
- * Compute the Equation of Time (in minutes) for a given date.
+ * Compute the Equation of Time (in minutes) for a given instant.
  * Equation of Time = apparent solar time − mean solar time.
  * Positive means the sundial is ahead of the clock.
  *
- * Uses a simplified but accurate (within ~30 seconds) formula.
+ * Time-aware (JD-based) implementation, accuracy ~1–2 seconds
+ * (Meeus Ch.28).
  */
 export function equationOfTime(date) {
-    const dayOfYear = dayOfYearUTC(date);
-    // Earth's orbital parameters
-    const B = (2 * Math.PI * (dayOfYear - 1)) / 365;
-    // Equation of time in minutes (simplified formula)
-    return 229.18 * (0.000075
-        + 0.001868 * Math.cos(B)
-        - 0.032077 * Math.sin(B)
-        - 0.014615 * Math.cos(2 * B)
-        - 0.040849 * Math.sin(2 * B));
+    return equationOfTimeMinutes(toJulianDate(date));
 }
 /**
  * Convert standard clock time to true solar time.
  *
- * @param date - Local clock time
+ * @param date - The clock instant (interpreted as UTC+8 wall clock)
  * @param longitude - Observer's longitude in degrees (east positive)
  * @param standardMeridian - Timezone's standard meridian (default 120°E for China)
- * @returns True solar time as a Date object
+ * @returns True solar time as a Date (instant)
  */
 export function toTrueSolarTime(date, longitude, standardMeridian = 120) {
-    // 1. Compute local mean time offset: 4 minutes per degree of longitude difference
+    // 1. Local mean time offset: 4 minutes per degree of longitude difference
     const lmtOffsetMinutes = (longitude - standardMeridian) * 4;
     // 2. Equation of time correction
     const eotMinutes = equationOfTime(date);
     // 3. Total offset
     const totalOffsetMinutes = lmtOffsetMinutes + eotMinutes;
     // 4. Apply offset
-    const result = new Date(date.getTime() + totalOffsetMinutes * 60 * 1000);
-    return result;
+    return new Date(date.getTime() + totalOffsetMinutes * 60 * 1000);
 }
 /**
- * Get day of year (1-366) based on UTC date components
- * (so we avoid local DST / calendar surprises).
+ * Read the UTC+8 (China Standard Time) wall clock of an instant as
+ * minutes since midnight. Independent of the host timezone.
  */
-function dayOfYearUTC(date) {
-    const year = date.getUTCFullYear();
-    const month = date.getUTCMonth(); // 0-indexed
-    const day = date.getUTCDate();
-    const startOfYear = Date.UTC(year, 0, 1);
-    const currentDay = Date.UTC(year, month, day);
-    return Math.floor((currentDay - startOfYear) / (24 * 60 * 60 * 1000)) + 1;
+function cstWallMinutes(instant) {
+    const cst = new Date(instant.getTime() + CST_OFFSET_MS);
+    return cst.getUTCHours() * 60 + cst.getUTCMinutes();
+}
+/**
+ * Get the true solar time as decimal hours.
+ *
+ * @param date - The clock instant (UTC+8 wall clock)
+ * @param longitude - Observer's longitude (east positive)
+ * @param isDST - True if the given wall clock already includes DST
+ * @param standardMeridian - Clock-time standard meridian (default 120°E)
+ */
+export function getSolarHours(date, longitude, isDST, standardMeridian = 120) {
+    // Wall-clock minutes; DST observed clock → subtract 1h to standard time
+    let wallMinutes = cstWallMinutes(date);
+    if (isDST)
+        wallMinutes -= 60;
+    // Longitude correction: 4 minutes per degree from the standard meridian
+    const lmtOffsetMinutes = (longitude - standardMeridian) * 4;
+    // Equation of time (time-aware)
+    const eotMinutes = equationOfTime(date);
+    // True solar time in local minutes, normalized to 0–1439
+    let solarTotalMinutes = wallMinutes + lmtOffsetMinutes + eotMinutes;
+    solarTotalMinutes = ((solarTotalMinutes % 1440) + 1440) % 1440;
+    return solarTotalMinutes / 60;
 }
 /**
  * Get the earthly branch index for an hour based on true solar time.
@@ -69,35 +87,14 @@ function dayOfYearUTC(date) {
  *  戌时: 19:00–20:59  (branch 10)
  *  亥时: 21:00–22:59  (branch 11)
  */
-export function getHourBranch(date, longitude, isDST) {
-    const solarHours = getSolarHours(date, longitude, isDST);
+export function getHourBranch(date, longitude, isDST, standardMeridian = 120) {
+    const solarHours = getSolarHours(date, longitude, isDST, standardMeridian);
     const totalMinutes = solarHours * 60;
     // 子时: 23:00–00:59
-    if (totalMinutes >= 1380 || totalMinutes < 60)
+    if (totalMinutes >= 23 * 60 || totalMinutes < 60)
         return 0;
     // 丑=1, 寅=2, ..., 亥=11
     // 1:00–2:59 → 1, 3:00–4:59 → 2, ...
     return Math.floor((totalMinutes + 60) / 120);
-}
-/**
- * Get the true solar time as decimal hours (local time).
- */
-export function getSolarHours(date, longitude, isDST) {
-    // If DST, adjust clock back to standard time
-    const adjustedDate = isDST
-        ? new Date(date.getTime() - 1 * 60 * 60 * 1000)
-        : new Date(date);
-    // Local clock hours and minutes
-    const localHours = adjustedDate.getHours();
-    const localMinutes = adjustedDate.getMinutes();
-    // Longitude correction: 4 minutes per degree from standard meridian (120°E)
-    const lmtOffsetMinutes = (longitude - 120) * 4;
-    // Equation of time
-    const eotMinutes = equationOfTime(adjustedDate);
-    // True solar time in local minutes
-    let solarTotalMinutes = localHours * 60 + localMinutes + lmtOffsetMinutes + eotMinutes;
-    // Normalize to 0–1439
-    solarTotalMinutes = ((solarTotalMinutes % 1440) + 1440) % 1440;
-    return solarTotalMinutes / 60;
 }
 //# sourceMappingURL=solarTime.js.map

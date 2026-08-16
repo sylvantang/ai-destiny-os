@@ -20,6 +20,7 @@ export type {
   JieQi,
   LiuNian,
   DestinyChart,
+  ChartRelations,
 } from './types.js';
 
 // Constants
@@ -55,10 +56,13 @@ export {
   toJulianDate,
   fromJulianDate,
   sunLongitude,
+  sunPosition,
+  equationOfTimeMinutes,
   getJieQi,
   getJieQiByName,
   getMonthBranchByDate,
 } from './jieqi.js';
+export type { SunPosition } from './jieqi.js';
 
 // BaZi
 export {
