@@ -29,6 +29,21 @@ export {
   buildMemoryContext,
 } from './eventTracker.js';
 
+// Event ↔ 大运/流年 context（P2）
+export {
+  computeEventContext,
+  addEventWithContext,
+  chartOf,
+} from './eventContext.js';
+export type { EventContext } from './eventContext.js';
+
+// Proactive alerts（P2）
+export {
+  checkLifeAlerts,
+  formatAlerts,
+} from './alerts.js';
+export type { LifeAlert } from './alerts.js';
+
 // Prediction tracking
 export {
   logPrediction,

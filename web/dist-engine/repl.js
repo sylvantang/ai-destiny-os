@@ -7,6 +7,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { DestinyAgent } from './agent/agentEngine.js';
 import { createAutoClient } from './agent/llmClient.js';
+import { MemoryStore, addEventWithContext, checkLifeAlerts, formatAlerts } from './memory/index.js';
 // ---- Constants ----
 const DATA_DIR = path.join(os.homedir(), '.ai-destiny-os');
 const SESSIONS_DIR = path.join(DATA_DIR, 'sessions');
@@ -31,10 +32,14 @@ const HELP = `
   /sessions     列出所有已保存的会话
   /clear        清空对话历史
   /birth        显示当前出生信息
+  /event <领域> <影响分> <标题>   记录人生事件（自动关联大运/流年）
+  /events       查看已记录的人生事件
+  /alerts [年份] 查看流年冲克预警（默认今年）
   /help         显示此帮助
   /exit, /quit  退出
 ──────────────────────────────────────────────────
-  直接输入问题即可与分析引擎对话`;
+  直接输入问题即可与分析引擎对话
+  领域: 事业 财富 感情 健康 学业 家庭 迁徙 其他 · 影响分: -5..5`;
 function ensureDataDir() {
     for (const dir of [DATA_DIR, SESSIONS_DIR]) {
         if (!fs.existsSync(dir)) {
@@ -83,12 +88,14 @@ function listSessions() {
 class DestinyREPL {
     agent;
     llm;
+    memory;
     rl;
     running = false;
     lastSessionSave = null;
     constructor(birth, llm) {
         this.agent = new DestinyAgent(birth, llm ?? undefined);
         this.llm = llm;
+        this.memory = new MemoryStore(`repl_${birth.year}${birth.month}${birth.day}`, birth);
         this.rl = readline.createInterface({
             input: process.stdin,
             output: process.stdout,
@@ -197,6 +204,39 @@ class DestinyREPL {
                 }
                 break;
             }
+            case 'event': {
+                this.handleEventCommand(args);
+                break;
+            }
+            case 'events': {
+                const events = this.memory.getEvents();
+                if (events.length === 0) {
+                    console.log('暂无人生事件。用法: /event 事业 3 升职主管');
+                }
+                else {
+                    console.log(`人生事件 (${events.length} 条):`);
+                    for (const e of events) {
+                        const date = e.date.slice(0, 10);
+                        const impactSign = e.impact > 0 ? '+' : '';
+                        console.log(`  ${date} [${e.domain}] ${impactSign}${e.impact} ${e.title}`);
+                        if (e.yearPillar || e.dayunAtTime) {
+                            console.log(`    ↳ 流年${e.yearPillar || '?'} · 大运${e.dayunAtTime || '?'}`);
+                        }
+                    }
+                }
+                break;
+            }
+            case 'alerts': {
+                const year = args ? parseInt(args, 10) : new Date().getFullYear();
+                if (Number.isNaN(year) || year < 1900 || year > 2100) {
+                    console.log('用法: /alerts [年份]');
+                    break;
+                }
+                const alerts = checkLifeAlerts(this.agent.state.chart, year, year);
+                console.log(`\n${year} 年流年预警:`);
+                console.log(formatAlerts(alerts));
+                break;
+            }
             case 'exit':
             case 'quit':
                 // Auto-save on exit
@@ -243,6 +283,38 @@ class DestinyREPL {
         catch (err) {
             console.error(`\n\x1b[31m错误: ${err instanceof Error ? err.message : '未知错误'}\x1b[0m`);
         }
+    }
+    handleEventCommand(args) {
+        const tokens = args.split(/\s+/).filter(Boolean);
+        if (tokens.length < 3) {
+            console.log('用法: /event <领域> <影响分> <标题>  例如 /event 事业 3 升职主管');
+            console.log('领域: 事业 财富 感情 健康 学业 家庭 迁徙 其他 · 影响分: -5..5');
+            return;
+        }
+        const domain = tokens[0];
+        const domains = ['事业', '财富', '感情', '健康', '学业', '家庭', '迁徙', '其他'];
+        if (!domains.includes(domain)) {
+            console.log(`领域 "${tokens[0]}" 无效。可选: ${domains.join(' ')}`);
+            return;
+        }
+        const impactNum = parseInt(tokens[1] ?? '', 10);
+        if (Number.isNaN(impactNum) || impactNum < -5 || impactNum > 5) {
+            console.log('影响分需为 -5 到 5 的整数');
+            return;
+        }
+        const title = tokens.slice(2).join(' ');
+        const event = addEventWithContext(this.memory, this.agent.state.birth, {
+            date: new Date().toISOString(),
+            domain,
+            title,
+            description: '',
+            impact: impactNum,
+            relatedPredictionIds: [],
+            notes: '',
+            tags: [],
+        });
+        console.log(`已记录: [${event.domain}] ${event.title} (影响 ${event.impact > 0 ? '+' : ''}${event.impact})`);
+        console.log(`  ↳ 流年${event.yearPillar || '?'} · 大运${event.dayunAtTime || '?'}`);
     }
     showHistory() {
         const { history } = this.agent.state;
